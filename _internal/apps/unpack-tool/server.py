@@ -22,6 +22,7 @@ ACTION_LABELS = {
     "install": "安装内置 VSAC29 映射",
     "scan": "扫描 FHM2D",
     "extract": "提取并转换 PNG",
+    "color": "修复 PNG 显示颜色",
     "catalog": "重建纹理目录",
     "validate": "验证全部图片",
     "map": "分类并生成组合映射",
@@ -102,6 +103,7 @@ class JobManager:
                 "--texconv",
                 str(self.core_root / "tools" / "texconv.exe"),
             ],
+            "color": [*common, "retag-srgb"],
             "catalog": [*common, "catalog"],
             "validate": [*common, "validate"],
             "map": [
@@ -148,11 +150,12 @@ class JobManager:
     @staticmethod
     def stages(action):
         if action == "quick":
-            return ["scan", "extract", "install", "map_validate"]
+            return ["scan", "extract", "color", "install", "map_validate"]
         if action == "full":
             return [
                 "scan",
                 "extract",
+                "color",
                 "catalog",
                 "validate",
                 "map",
@@ -179,7 +182,7 @@ class JobManager:
     def start(self, action):
         if action not in ACTION_LABELS:
             raise ValueError("未知操作")
-        if not self.source_root.is_dir():
+        if action != "color" and not self.source_root.is_dir():
             raise FileNotFoundError(
                 f"未找到游戏资源目录：{self.source_root}"
             )

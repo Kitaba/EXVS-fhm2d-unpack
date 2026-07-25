@@ -18,6 +18,7 @@ from fhm2d_extract_textures import (
     parse_group_labels,
     scan_textures,
 )
+from png_color_profile import png_color_metadata, retag_png_srgb
 
 SUPPORTED_BATCH_FORMATS = {FHM2D_BC7_FORMAT, FHM2D_RGBA8_FORMAT}
 
@@ -486,6 +487,8 @@ def convert_dds_batch(texconv, dds_files, png_dir):
             raise ValueError(
                 f"texconv failed: {result.stdout}\n{result.stderr}"
             )
+        for dds_path in batch:
+            retag_png_srgb(png_dir / dds_path.with_suffix(".png").name)
     missing = [
         path.name
         for path in dds_files
@@ -536,6 +539,37 @@ def png_command(args):
     return 0
 
 
+def retag_srgb_command(args):
+    output_root = Path(args.output)
+    catalog = read_inventory(output_root / "inventory" / "textures.csv")
+    if not catalog:
+        raise FileNotFoundError(
+            f"texture catalog was not found or is empty: {output_root}"
+        )
+    counts = {
+        "gamma_updated": 0,
+        "gamma_inserted": 0,
+        "already_srgb": 0,
+        "missing": 0,
+    }
+    for index, row in enumerate(catalog, 1):
+        png_path = output_root / row["png_output"]
+        if not png_path.is_file():
+            counts["missing"] += 1
+            continue
+        result = retag_png_srgb(png_path)
+        counts[result] += 1
+        if index % 1000 == 0:
+            print(
+                f"retag_srgb={index}/{len(catalog)} "
+                f"updated={counts['gamma_updated'] + counts['gamma_inserted']} "
+                f"missing={counts['missing']}",
+                flush=True,
+            )
+    print(json.dumps(counts, ensure_ascii=False), flush=True)
+    return 0
+
+
 def validate_command(args):
     from PIL import Image
 
@@ -549,6 +583,7 @@ def validate_command(args):
     problems = []
     format_counts = {}
     dds_count = png_count = metadata_count = 0
+    color_profile_problem_count = 0
     for index, row in enumerate(catalog, 1):
         package_dir = Path(row["package_directory"])
         png_path = output_root / row["png_output"]
@@ -571,6 +606,11 @@ def validate_command(args):
                         problems.append(
                             f"PNG size {image.size} != {expected}: {png_path}"
                         )
+                color_metadata = png_color_metadata(png_path)
+                if not color_metadata["has_srgb"] and (
+                    color_metadata["gamma"] != 45455
+                ):
+                    color_profile_problem_count += 1
             except Exception as exc:
                 problems.append(f"invalid PNG {png_path}: {exc}")
         if metadata_path.is_file():
@@ -597,6 +637,7 @@ def validate_command(args):
         "png_count": png_count,
         "dds_count": dds_count,
         "metadata_count": metadata_count,
+        "color_profile_problem_count": color_profile_problem_count,
         "problem_count": len(problems),
         "problems": problems,
     }
@@ -650,6 +691,12 @@ def main(argv=None):
     png_parser.add_argument("--ignore-space-check", action="store_true")
     png_parser.add_argument("--force", action="store_true")
     png_parser.set_defaults(func=png_command)
+
+    retag_parser = subparsers.add_parser(
+        "retag-srgb",
+        help="Fix PNG display metadata without changing RGBA pixel values",
+    )
+    retag_parser.set_defaults(func=retag_srgb_command)
 
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("--max-problems", type=int, default=100)

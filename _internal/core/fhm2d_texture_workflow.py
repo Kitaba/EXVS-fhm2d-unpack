@@ -11,6 +11,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
+from png_color_profile import retag_png_srgb
+
 from fhm2d_dds_match import parse_dds
 from fhm2d_extract_textures import extract_file
 from fhm2d_repack import decode_container, repack_file
@@ -142,6 +144,8 @@ def convert_dds_to_png(texconv, dds_paths, png_dir):
             texconv,
             ["-y", "-ft", "png", "--ignore-srgb", "-o", png_dir, *batch],
         )
+        for dds_path in batch:
+            retag_png_srgb(png_dir / dds_path.with_suffix(".png").name)
 
 
 def export_project(input_path, output_root, texconv, force=False):

@@ -99,7 +99,12 @@
           <button data-action="extract">
             <span class="step-number">02</span>
             <strong>提取 PNG</strong>
-            <small>DDS 转换后紧凑保存</small>
+            <small>DDS 转换后按标准 sRGB 显示</small>
+          </button>
+          <button data-action="color">
+            <span class="step-number">02B</span>
+            <strong>修复显示颜色</strong>
+            <small>现有 PNG 发白时使用，不改变像素</small>
           </button>
           <button data-action="catalog">
             <span class="step-number">03</span>
@@ -121,6 +126,7 @@
         <div class="notes">
           <strong>如何选择</strong>
           <p>新的 VSAC29 工作区：选择“VSAC29 快速准备”。已有完整提取结果：选择“仅安装内置映射”。映射数量已经显示为 1,297 时，可直接关闭本页并启动立绘查看器。</p>
+          <p>旧版工具提取的 PNG 若在 Windows“照片”或图像编辑软件中显得发白，请执行一次“修复显示颜色”。该操作只把错误的线性 Gamma 标记改为标准 sRGB，不调整 RGBA 数值，不影响回包。</p>
           <p>图片提取仍需要较长时间，并占用约 5 GiB 或更多磁盘空间；可中止后再次点击快速准备继续。</p>
           <p>输出仅写入工具包的“工作区”，不会覆盖游戏目录中的原始文件。</p>
         </div>
