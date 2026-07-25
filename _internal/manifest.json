@@ -1,0 +1,26 @@
+﻿{
+    "name":  "EXVSIB Texture Toolkit",
+    "built_utc":  "2026-07-25T03:55:15.1906677Z",
+    "python_source":  "https://www.python.org/ftp/python/3.10.11/python-3.10.11-embed-amd64.zip",
+    "python_archive_sha256":  "608619f8619075629c9c69f361352a0da6ed7e62f83a0e19c63e0ea32eb7629d",
+    "runtime":  {
+                    "python":  "3.10.11",
+                    "numpy":  "1.26.4",
+                    "pillow":  "12.0.0"
+                },
+    "root_launchers":  [
+                           "启动立绘查看器.bat",
+                           "启动解包工具.bat"
+                       ],
+    "core_scripts":  [
+                         "fhm2d_unpack.py",
+                         "fhm2d_extract_textures.py",
+                         "fhm2d_batch_textures.py",
+                         "fhm2d_dds_match.py",
+                         "fhm2d_repack.py",
+                         "fhm2d_texture_workflow.py",
+                         "mapping_database.py",
+                         "texture_asset_mapper.py"
+                     ],
+    "texconv_sha256":  "dcfdec10244e02cf5037fba089c55fb7e1326b1c8181742d77d15fa5cb5eef06"
+}

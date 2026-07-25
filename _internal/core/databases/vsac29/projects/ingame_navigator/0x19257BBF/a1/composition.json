@@ -1,0 +1,86 @@
+{
+  "mapping_version": 1,
+  "category": "ingame_navigator",
+  "package": "0x19257BBF",
+  "group": "a1",
+  "canvas": {
+    "width": 260,
+    "height": 180
+  },
+  "body": {
+    "texture_id": "0x19257BBF/a1/00000",
+    "role": "body",
+    "embedded_index": 0,
+    "width": 260,
+    "height": 180,
+    "source_png": "packages\\0x19257BBF\\png\\a1_00000_260x180_bc7.png",
+    "replacement_path": "ingame_navigator\\0x19257BBF\\a1\\a1_00000_260x180_bc7.png"
+  },
+  "families": [
+    {
+      "family": "expression",
+      "role": "expression",
+      "dimensions": [
+        80,
+        40
+      ],
+      "anchor": {
+        "x": 89,
+        "y": 38,
+        "coverage": 1.0,
+        "boundary": 1.0,
+        "score": 1.5,
+        "method": "alpha_gap_rectangle"
+      },
+      "baseline_texture_id": "0x19257BBF/a1/00001",
+      "states": [
+        {
+          "category": "ingame_navigator",
+          "package": "0x19257BBF",
+          "group": "a1",
+          "texture_id": "0x19257BBF/a1/00001",
+          "role": "expression",
+          "family": "expression",
+          "state_index": 0,
+          "embedded_index": 1,
+          "width": 80,
+          "height": 40,
+          "anchor_x": 89,
+          "anchor_y": 38,
+          "mapping_method": "alpha_gap_rectangle",
+          "coverage": 1.0,
+          "boundary": 1.0,
+          "match_rmse": "",
+          "source_png": "packages\\0x19257BBF\\png\\a1_00001_80x40_bc7.png",
+          "replacement_path": "ingame_navigator\\0x19257BBF\\a1\\a1_00001_80x40_bc7.png"
+        },
+        {
+          "category": "ingame_navigator",
+          "package": "0x19257BBF",
+          "group": "a1",
+          "texture_id": "0x19257BBF/a1/00002",
+          "role": "expression",
+          "family": "expression",
+          "state_index": 1,
+          "embedded_index": 2,
+          "width": 80,
+          "height": 40,
+          "anchor_x": 89,
+          "anchor_y": 38,
+          "mapping_method": "alpha_gap_rectangle",
+          "coverage": 1.0,
+          "boundary": 1.0,
+          "match_rmse": "",
+          "source_png": "packages\\0x19257BBF\\png\\a1_00002_80x40_bc7.png",
+          "replacement_path": "ingame_navigator\\0x19257BBF\\a1\\a1_00002_80x40_bc7.png"
+        }
+      ]
+    }
+  ],
+  "draw_order": [
+    "body",
+    "expression"
+  ],
+  "blend": "straight_alpha_source_over",
+  "warnings": []
+}

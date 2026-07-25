@@ -1,0 +1,146 @@
+{
+  "mapping_version": 1,
+  "category": "combat_portrait",
+  "package": "0xE5378070",
+  "group": "g00",
+  "canvas": {
+    "width": 572,
+    "height": 572
+  },
+  "body": {
+    "texture_id": "0xE5378070/g00/00001",
+    "role": "body",
+    "embedded_index": 1,
+    "width": 572,
+    "height": 572,
+    "source_png": "packages\\0xE5378070\\png\\g00_00001_572x572_bc7.png",
+    "replacement_path": "combat_portrait\\0xE5378070\\g00\\g00_00001_572x572_bc7.png"
+  },
+  "families": [
+    {
+      "family": "mouth_1",
+      "role": "mouth_1",
+      "dimensions": [
+        92,
+        76
+      ],
+      "anchor": {
+        "x": 98,
+        "y": 333,
+        "rmse": 13.899446728689602,
+        "full_rmse": 61.9895605219138,
+        "stable_border_pixels": 2628.984375,
+        "method": "stable_border_rgba_ssd"
+      },
+      "baseline_texture_id": "0xE5378070/g00/00002",
+      "states": [
+        {
+          "category": "combat_portrait",
+          "package": "0xE5378070",
+          "group": "g00",
+          "texture_id": "0xE5378070/g00/00002",
+          "role": "mouth_1",
+          "family": "mouth_1",
+          "state_index": 0,
+          "embedded_index": 2,
+          "width": 92,
+          "height": 76,
+          "anchor_x": 98,
+          "anchor_y": 333,
+          "mapping_method": "stable_border_rgba_ssd",
+          "coverage": "",
+          "boundary": "",
+          "match_rmse": 13.899446728689602,
+          "source_png": "packages\\0xE5378070\\png\\g00_00002_92x76_bc7.png",
+          "replacement_path": "combat_portrait\\0xE5378070\\g00\\g00_00002_92x76_bc7.png"
+        },
+        {
+          "category": "combat_portrait",
+          "package": "0xE5378070",
+          "group": "g00",
+          "texture_id": "0xE5378070/g00/00003",
+          "role": "mouth_1",
+          "family": "mouth_1",
+          "state_index": 1,
+          "embedded_index": 3,
+          "width": 92,
+          "height": 76,
+          "anchor_x": 98,
+          "anchor_y": 333,
+          "mapping_method": "stable_border_rgba_ssd",
+          "coverage": "",
+          "boundary": "",
+          "match_rmse": 13.899446728689602,
+          "source_png": "packages\\0xE5378070\\png\\g00_00003_92x76_bc7.png",
+          "replacement_path": "combat_portrait\\0xE5378070\\g00\\g00_00003_92x76_bc7.png"
+        }
+      ]
+    },
+    {
+      "family": "mouth_2",
+      "role": "mouth_2",
+      "dimensions": [
+        100,
+        56
+      ],
+      "anchor": {
+        "x": 371,
+        "y": 301,
+        "rmse": 9.571036553917427,
+        "full_rmse": 55.76684659958221,
+        "stable_border_pixels": 1949.929443359375,
+        "method": "stable_border_rgba_ssd"
+      },
+      "baseline_texture_id": "0xE5378070/g00/00004",
+      "states": [
+        {
+          "category": "combat_portrait",
+          "package": "0xE5378070",
+          "group": "g00",
+          "texture_id": "0xE5378070/g00/00004",
+          "role": "mouth_2",
+          "family": "mouth_2",
+          "state_index": 0,
+          "embedded_index": 4,
+          "width": 100,
+          "height": 56,
+          "anchor_x": 371,
+          "anchor_y": 301,
+          "mapping_method": "stable_border_rgba_ssd",
+          "coverage": "",
+          "boundary": "",
+          "match_rmse": 9.571036553917427,
+          "source_png": "packages\\0xE5378070\\png\\g00_00004_100x56_bc7.png",
+          "replacement_path": "combat_portrait\\0xE5378070\\g00\\g00_00004_100x56_bc7.png"
+        },
+        {
+          "category": "combat_portrait",
+          "package": "0xE5378070",
+          "group": "g00",
+          "texture_id": "0xE5378070/g00/00005",
+          "role": "mouth_2",
+          "family": "mouth_2",
+          "state_index": 1,
+          "embedded_index": 5,
+          "width": 100,
+          "height": 56,
+          "anchor_x": 371,
+          "anchor_y": 301,
+          "mapping_method": "stable_border_rgba_ssd",
+          "coverage": "",
+          "boundary": "",
+          "match_rmse": 9.571036553917427,
+          "source_png": "packages\\0xE5378070\\png\\g00_00005_100x56_bc7.png",
+          "replacement_path": "combat_portrait\\0xE5378070\\g00\\g00_00005_100x56_bc7.png"
+        }
+      ]
+    }
+  ],
+  "draw_order": [
+    "body",
+    "mouth_1",
+    "mouth_2"
+  ],
+  "blend": "straight_alpha_source_over",
+  "warnings": []
+}

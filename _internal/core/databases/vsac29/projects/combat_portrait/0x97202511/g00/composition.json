@@ -1,0 +1,86 @@
+{
+  "mapping_version": 1,
+  "category": "combat_portrait",
+  "package": "0x97202511",
+  "group": "g00",
+  "canvas": {
+    "width": 572,
+    "height": 572
+  },
+  "body": {
+    "texture_id": "0x97202511/g00/00001",
+    "role": "body",
+    "embedded_index": 1,
+    "width": 572,
+    "height": 572,
+    "source_png": "packages\\0x97202511\\png\\g00_00001_572x572_bc7.png",
+    "replacement_path": "combat_portrait\\0x97202511\\g00\\g00_00001_572x572_bc7.png"
+  },
+  "families": [
+    {
+      "family": "mouth",
+      "role": "mouth",
+      "dimensions": [
+        80,
+        80
+      ],
+      "anchor": {
+        "x": 236,
+        "y": 274,
+        "rmse": 7.992206397408884,
+        "full_rmse": 51.69002049418327,
+        "stable_border_pixels": 2780.96875,
+        "method": "stable_border_rgba_ssd"
+      },
+      "baseline_texture_id": "0x97202511/g00/00002",
+      "states": [
+        {
+          "category": "combat_portrait",
+          "package": "0x97202511",
+          "group": "g00",
+          "texture_id": "0x97202511/g00/00002",
+          "role": "mouth",
+          "family": "mouth",
+          "state_index": 0,
+          "embedded_index": 2,
+          "width": 80,
+          "height": 80,
+          "anchor_x": 236,
+          "anchor_y": 274,
+          "mapping_method": "stable_border_rgba_ssd",
+          "coverage": "",
+          "boundary": "",
+          "match_rmse": 7.992206397408884,
+          "source_png": "packages\\0x97202511\\png\\g00_00002_80x80_bc7.png",
+          "replacement_path": "combat_portrait\\0x97202511\\g00\\g00_00002_80x80_bc7.png"
+        },
+        {
+          "category": "combat_portrait",
+          "package": "0x97202511",
+          "group": "g00",
+          "texture_id": "0x97202511/g00/00003",
+          "role": "mouth",
+          "family": "mouth",
+          "state_index": 1,
+          "embedded_index": 3,
+          "width": 80,
+          "height": 80,
+          "anchor_x": 236,
+          "anchor_y": 274,
+          "mapping_method": "stable_border_rgba_ssd",
+          "coverage": "",
+          "boundary": "",
+          "match_rmse": 7.992206397408884,
+          "source_png": "packages\\0x97202511\\png\\g00_00003_80x80_bc7.png",
+          "replacement_path": "combat_portrait\\0x97202511\\g00\\g00_00003_80x80_bc7.png"
+        }
+      ]
+    }
+  ],
+  "draw_order": [
+    "body",
+    "mouth"
+  ],
+  "blend": "straight_alpha_source_over",
+  "warnings": []
+}

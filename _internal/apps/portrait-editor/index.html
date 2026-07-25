@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EXVSIB 立绘编辑器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-mark">IB</div>
+      <div>
+        <h1>立绘编辑器</h1>
+        <p id="mappingMeta">正在读取映射...</p>
+      </div>
+    </div>
+    <div class="header-status">
+      <span class="status-dot"></span>
+      <span id="replacementStatus">本地映射</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="library-panel">
+      <div class="panel-heading">
+        <div>
+          <span class="eyebrow">资源库</span>
+          <h2>人物立绘</h2>
+        </div>
+        <button id="refreshButton" class="icon-button" title="刷新资源">↻</button>
+      </div>
+
+      <div id="categoryTabs" class="category-tabs" role="tablist"></div>
+
+      <label class="search-box">
+        <span aria-hidden="true">⌕</span>
+        <input id="searchInput" type="search" placeholder="搜索 package 或 group">
+      </label>
+
+      <label class="modified-filter">
+        <input id="modifiedOnly" type="checkbox">
+        <span>仅显示已修改</span>
+        <span id="resultCount" class="count-label"></span>
+      </label>
+
+      <div id="gallery" class="gallery" aria-live="polite"></div>
+
+      <div class="pagination">
+        <button id="previousPage" class="icon-button" title="上一页">‹</button>
+        <span id="pageLabel">1 / 1</span>
+        <button id="nextPage" class="icon-button" title="下一页">›</button>
+      </div>
+    </aside>
+
+    <section class="preview-panel">
+      <div class="preview-toolbar">
+        <div class="selection-title">
+          <span id="selectionCategory" class="eyebrow">请选择人物</span>
+          <h2 id="selectionName">未选择立绘</h2>
+        </div>
+        <div class="toolbar-actions">
+          <div class="segmented" aria-label="预览来源">
+            <button class="mode-button active" data-mode="current">修改后</button>
+            <button class="mode-button" data-mode="source">原始</button>
+          </div>
+          <button id="zoomOut" class="icon-button" title="缩小">−</button>
+          <span id="zoomLabel" class="zoom-label">适合</span>
+          <button id="zoomIn" class="icon-button" title="放大">＋</button>
+          <button id="fitButton" class="icon-button" title="适合窗口">⛶</button>
+          <button id="downloadButton" class="command-button" disabled>导出预览</button>
+        </div>
+      </div>
+
+      <div id="canvasViewport" class="canvas-viewport">
+        <div id="emptyState" class="empty-state">
+          <div class="empty-symbol">▧</div>
+          <strong>从左侧选择一组立绘</strong>
+          <span>组合预览将按映射坐标显示</span>
+        </div>
+        <canvas id="previewCanvas" hidden></canvas>
+      </div>
+
+      <div class="preview-footer">
+        <span id="canvasInfo">画布尺寸 -</span>
+        <span id="renderInfo">straight alpha · source-over</span>
+      </div>
+    </section>
+
+    <aside class="inspector-panel">
+      <div class="panel-heading inspector-heading">
+        <div>
+          <span class="eyebrow">检查器</span>
+          <h2>图层与状态</h2>
+        </div>
+        <span id="modifiedBadge" class="modified-badge" hidden>已修改</span>
+      </div>
+
+      <div id="inspectorEmpty" class="inspector-empty">
+        选择人物后可检查主体、眼睛与嘴部状态。
+      </div>
+
+      <div id="inspectorContent" hidden>
+        <section class="target-section">
+          <div class="section-label">当前替换目标</div>
+          <div id="targetCard" class="target-card"></div>
+          <input id="fileInput" type="file" accept="image/png" hidden>
+          <div class="target-actions">
+            <button id="uploadButton" class="primary-button">选择 PNG</button>
+            <button id="restoreButton" class="secondary-button" disabled>恢复原图</button>
+          </div>
+          <div id="dropZone" class="drop-zone" tabindex="0">
+            将 PNG 拖到这里替换当前目标
+          </div>
+          <p id="uploadRule" class="upload-rule"></p>
+        </section>
+
+        <div id="layerSections" class="layer-sections"></div>
+      </div>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>

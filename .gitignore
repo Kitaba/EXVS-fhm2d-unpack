@@ -1,0 +1,8 @@
+workspace/*
+!workspace/README.txt
+**/__pycache__/
+*.py[cod]
+*.log
+*.tmp
+*.tmp.png
+_internal/apps/**/qa-*.png

@@ -1,0 +1,25 @@
+{
+  "mapping_version": 1,
+  "category": "outgame_navigator",
+  "package": "0xB8D881CA",
+  "group": "g1",
+  "canvas": {
+    "width": 872,
+    "height": 960
+  },
+  "body": {
+    "texture_id": "0xB8D881CA/g1/00000",
+    "role": "body",
+    "embedded_index": 0,
+    "width": 872,
+    "height": 960,
+    "source_png": "packages\\0xB8D881CA\\png\\g1_00000_872x960_bc7.png",
+    "replacement_path": "outgame_navigator\\0xB8D881CA\\g1\\g1_00000_872x960_bc7.png"
+  },
+  "families": [],
+  "draw_order": [
+    "body"
+  ],
+  "blend": "straight_alpha_source_over",
+  "warnings": []
+}

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EXVSIB 纹理解包器</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="brand-mark">IB</div>
+    <div>
+      <h1>纹理解包器</h1>
+      <p>FHM2D · DDS · PNG · 人物映射</p>
+    </div>
+    <div id="connection" class="connection"><i></i>本地工作区</div>
+  </header>
+
+  <main>
+    <section class="summary-band">
+      <div>
+        <span>游戏资源</span>
+        <strong id="sourceState">检查中</strong>
+        <small id="sourcePath">-</small>
+      </div>
+      <div>
+        <span>已扫描包</span>
+        <strong id="packageCount">0</strong>
+        <small id="supportedCount">0 个纹理包</small>
+      </div>
+      <div>
+        <span>已提取纹理</span>
+        <strong id="textureCount">0</strong>
+        <small>BC7 / RGBA8 PNG</small>
+      </div>
+      <div>
+        <span>人物映射</span>
+        <strong id="mappingCount">0</strong>
+        <small>可在查看器中使用</small>
+      </div>
+      <div>
+        <span>工作盘剩余</span>
+        <strong id="freeSpace">-</strong>
+        <small id="workspacePath">-</small>
+      </div>
+    </section>
+
+    <div class="content-grid">
+      <section class="operations">
+        <div class="section-heading">
+          <div>
+            <span>工作流</span>
+            <h2>建立立绘资源库</h2>
+          </div>
+          <span class="safe-label">只读原始 FHM2D</span>
+        </div>
+
+        <div class="version-guide">
+          <div>
+            <span class="version-badge">VSAC29 内置映射</span>
+            <strong id="databaseState">正在读取内置数据库</strong>
+          </div>
+          <p>内置的是人物分类、图层坐标和组合关系，不包含游戏图片。首次使用仍需提取 PNG，但不必重新分析人物映射，也不必执行完整验证。</p>
+        </div>
+
+        <div class="quick-actions">
+          <button class="quick-primary" data-action="quick">
+            <span class="step-number">推荐</span>
+            <span>
+              <strong>VSAC29 快速准备</strong>
+              <small>扫描、断点提取、自动建目录、安装内置映射</small>
+            </span>
+            <b>开始</b>
+          </button>
+          <button class="quick-secondary" data-action="install">
+            <span>
+              <strong>仅安装内置映射</strong>
+              <small>已有完整 PNG 和 textures.csv 时使用，通常只需数秒</small>
+            </span>
+            <b>安装</b>
+          </button>
+        </div>
+
+        <button class="primary-operation full-operation" data-action="full">
+          <span class="step-number">01—06</span>
+          <span>
+            <strong>一键建立完整立绘库</strong>
+            <small>用于全量校验或排查问题；VSAC29 日常使用无需执行</small>
+          </span>
+          <b>开始</b>
+        </button>
+
+        <div class="stage-grid">
+          <button data-action="scan">
+            <span class="step-number">01</span>
+            <strong>扫描资源</strong>
+            <small>建立可断点续跑清单</small>
+          </button>
+          <button data-action="extract">
+            <span class="step-number">02</span>
+            <strong>提取 PNG</strong>
+            <small>DDS 转换后紧凑保存</small>
+          </button>
+          <button data-action="catalog">
+            <span class="step-number">03</span>
+            <strong>重建目录</strong>
+            <small>汇总尺寸、格式与位置</small>
+          </button>
+          <button data-action="validate">
+            <span class="step-number">04</span>
+            <strong>验证图片</strong>
+            <small>检查 RGBA、尺寸与元数据</small>
+          </button>
+          <button data-action="map">
+            <span class="step-number">05</span>
+            <strong>兼容模式映射</strong>
+            <small>内置版本不匹配时自动重新分析</small>
+          </button>
+        </div>
+
+        <div class="notes">
+          <strong>如何选择</strong>
+          <p>新的 VSAC29 工作区：选择“VSAC29 快速准备”。已有完整提取结果：选择“仅安装内置映射”。映射数量已经显示为 1,297 时，可直接关闭本页并启动立绘查看器。</p>
+          <p>图片提取仍需要较长时间，并占用约 5 GiB 或更多磁盘空间；可中止后再次点击快速准备继续。</p>
+          <p>输出仅写入工具包的“工作区”，不会覆盖游戏目录中的原始文件。</p>
+        </div>
+      </section>
+
+      <section class="task-panel">
+        <div class="section-heading">
+          <div>
+            <span>任务</span>
+            <h2 id="taskTitle">等待操作</h2>
+          </div>
+          <button id="cancelButton" class="cancel-button" disabled>中止</button>
+        </div>
+
+        <div class="progress-track"><i id="progressBar"></i></div>
+        <div class="progress-meta">
+          <span id="stageLabel">尚未开始</span>
+          <span id="timeLabel">-</span>
+        </div>
+
+        <div id="logOutput" class="log-output">
+          <div class="log-placeholder">运行日志将在这里显示</div>
+        </div>
+
+        <div class="task-footer">
+          <span id="resultLabel">工作区已就绪</span>
+          <button id="copyLogButton">复制日志</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
