@@ -14,11 +14,14 @@
                        ],
     "core_scripts":  [
                          "fhm2d_unpack.py",
+                         "fhm2d_deep_unpack.py",
                          "fhm2d_extract_textures.py",
                          "fhm2d_batch_textures.py",
                          "fhm2d_dds_match.py",
                          "fhm2d_repack.py",
                          "fhm2d_texture_workflow.py",
+                         "png_color_profile.py",
+                         "portrait_patch_manager.py",
                          "mapping_database.py",
                          "texture_asset_mapper.py"
                      ],

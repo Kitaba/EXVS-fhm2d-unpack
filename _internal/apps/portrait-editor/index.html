@@ -21,6 +21,23 @@
     </div>
   </header>
 
+  <section class="deployment-bar" aria-label="游戏补丁">
+    <div class="deployment-summary">
+      <span class="eyebrow">游戏补丁</span>
+      <strong id="patchSummary">正在检查替换图...</strong>
+    </div>
+    <div class="deployment-state">
+      <span id="patchMessage">等待操作</span>
+      <span id="patchPackages"></span>
+    </div>
+    <div class="deployment-actions">
+      <button id="patchLogButton" class="icon-button" title="查看补丁日志">≡</button>
+      <button id="buildPatchButton" class="command-button">构建补丁</button>
+      <button id="deployPatchButton" class="deploy-button">备份并部署</button>
+      <button id="restoreBackupButton" class="secondary-button">恢复备份</button>
+    </div>
+  </section>
+
   <main class="workspace">
     <aside class="library-panel">
       <div class="panel-heading">
@@ -119,6 +136,21 @@
       </div>
     </aside>
   </main>
+
+  <dialog id="patchDialog" class="patch-dialog">
+    <form method="dialog">
+      <div class="dialog-heading">
+        <span class="eyebrow">游戏文件操作</span>
+        <h2 id="patchDialogTitle">确认操作</h2>
+      </div>
+      <p id="patchDialogMessage"></p>
+      <pre id="patchDialogLog" hidden></pre>
+      <div class="dialog-actions">
+        <button id="patchDialogCancel" class="secondary-button" value="cancel">取消</button>
+        <button id="patchDialogConfirm" class="deploy-button" value="confirm">确认</button>
+      </div>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="app.js"></script>

@@ -4,6 +4,7 @@ import csv
 import json
 import os
 import shutil
+import sys
 import tempfile
 import threading
 import webbrowser
@@ -123,6 +124,28 @@ class PortraitData:
                 result.add(key)
         return result
 
+    def replacement_records(self):
+        self.scan_replacements()
+        records = []
+        for texture_id, (key, layer) in self.layer_index.items():
+            if not self.is_replaced(layer):
+                continue
+            category, package, group = key
+            records.append(
+                {
+                    "texture_id": texture_id,
+                    "category": category,
+                    "package": package,
+                    "group": group,
+                    "embedded_index": int(layer["embedded_index"]),
+                    "source_png": layer["source_png"],
+                    "replacement_file": str(
+                        self.replacement_path(layer)
+                    ),
+                }
+            )
+        return sorted(records, key=lambda row: row["texture_id"])
+
     def meta(self):
         modified = self.modified_group_keys()
         replacement_count = sum(
@@ -131,6 +154,7 @@ class PortraitData:
         )
         return {
             "title": "EXVSIB 立绘编辑器",
+            "patch_api_version": 1,
             "workspace": str(self.mapping_root.parent),
             "mapping_version": self.mapping["mapping_version"],
             "group_count": self.mapping["group_count"],
@@ -369,6 +393,7 @@ class PortraitData:
 
 class PortraitHandler(SimpleHTTPRequestHandler):
     data = None
+    patch_manager = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -404,6 +429,8 @@ class PortraitHandler(SimpleHTTPRequestHandler):
         try:
             if parsed.path == "/api/meta":
                 return self.json_response(self.data.meta())
+            if parsed.path == "/api/patch/status":
+                return self.json_response(self.patch_manager.summary())
             if parsed.path == "/api/groups":
                 page = max(1, int(self.single(query, "page", "1")))
                 page_size = min(
@@ -452,6 +479,17 @@ class PortraitHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path.startswith("/api/patch/"):
+            action = parsed.path.rsplit("/", 1)[-1]
+            try:
+                return self.json_response(
+                    self.patch_manager.start(action),
+                    HTTPStatus.ACCEPTED,
+                )
+            except ValueError as exc:
+                return self.error_response(exc, HTTPStatus.CONFLICT)
+            except (FileNotFoundError, OSError) as exc:
+                return self.error_response(exc)
         if parsed.path == "/api/rescan":
             count = self.data.scan_replacements()
             return self.json_response({"replacement_count": count})
@@ -462,6 +500,11 @@ class PortraitHandler(SimpleHTTPRequestHandler):
         content_type = self.headers.get("Content-Type", "").split(";")[0]
         if content_type != "image/png":
             return self.error_response("Content-Type 必须为 image/png")
+        if self.patch_manager.is_running():
+            return self.error_response(
+                "补丁任务运行期间不能修改替换图",
+                HTTPStatus.CONFLICT,
+            )
         try:
             length = int(self.headers.get("Content-Length", "0"))
             result = self.data.save_replacement(
@@ -478,6 +521,11 @@ class PortraitHandler(SimpleHTTPRequestHandler):
         if parsed.path != "/api/replacement":
             return self.error_response("API 不存在", HTTPStatus.NOT_FOUND)
         query = parse_qs(parsed.query)
+        if self.patch_manager.is_running():
+            return self.error_response(
+                "补丁任务运行期间不能修改替换图",
+                HTTPStatus.CONFLICT,
+            )
         try:
             result = self.data.delete_replacement(
                 self.single(query, "texture_id")
@@ -494,10 +542,43 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--workspace")
+    parser.add_argument("--game-root")
+    parser.add_argument("--core")
     parser.add_argument("--open-browser", action="store_true")
     args = parser.parse_args()
     editor_root = Path(__file__).resolve().parent
-    PortraitHandler.data = PortraitData(editor_root, args.workspace)
+    workspace = (
+        Path(args.workspace).resolve()
+        if args.workspace
+        else editor_root.parent / "workspace"
+    )
+    packaged_core = editor_root.parents[1] / "core"
+    development_core = editor_root.parents[1] / "patch"
+    core_root = (
+        Path(args.core).resolve()
+        if args.core
+        else (
+            packaged_core
+            if packaged_core.is_dir()
+            else development_core
+        )
+    )
+    game_root = (
+        Path(args.game_root).resolve()
+        if args.game_root
+        else workspace.parent.parent.resolve()
+    )
+    if str(core_root) not in sys.path:
+        sys.path.insert(0, str(core_root))
+    from portrait_patch_manager import PortraitPatchManager
+
+    PortraitHandler.data = PortraitData(editor_root, workspace)
+    PortraitHandler.patch_manager = PortraitPatchManager(
+        game_root,
+        workspace,
+        core_root,
+        PortraitHandler.data.replacement_records,
+    )
     server = ThreadingHTTPServer((args.host, args.port), PortraitHandler)
     url = f"http://{args.host}:{args.port}"
     print(

@@ -12,6 +12,7 @@ const state = {
   previewMode: "current",
   zoom: null,
   groupsAbort: null,
+  patch: null,
 };
 
 const els = {
@@ -49,6 +50,19 @@ const els = {
   uploadRule: document.querySelector("#uploadRule"),
   layerSections: document.querySelector("#layerSections"),
   toast: document.querySelector("#toast"),
+  patchSummary: document.querySelector("#patchSummary"),
+  patchMessage: document.querySelector("#patchMessage"),
+  patchPackages: document.querySelector("#patchPackages"),
+  patchLogButton: document.querySelector("#patchLogButton"),
+  buildPatchButton: document.querySelector("#buildPatchButton"),
+  deployPatchButton: document.querySelector("#deployPatchButton"),
+  restoreBackupButton: document.querySelector("#restoreBackupButton"),
+  patchDialog: document.querySelector("#patchDialog"),
+  patchDialogTitle: document.querySelector("#patchDialogTitle"),
+  patchDialogMessage: document.querySelector("#patchDialogMessage"),
+  patchDialogLog: document.querySelector("#patchDialogLog"),
+  patchDialogCancel: document.querySelector("#patchDialogCancel"),
+  patchDialogConfirm: document.querySelector("#patchDialogConfirm"),
 };
 
 const roleLabels = {
@@ -97,6 +111,113 @@ async function loadMeta() {
     `${state.meta.replacement_count} 张替换 · ` +
     `${state.meta.modified_group_count} 组已修改`;
   renderCategoryTabs();
+}
+
+function renderPatchStatus(data) {
+  const previous = state.patch;
+  state.patch = data;
+  const count = data.replacement_count || 0;
+  const packageCount = data.affected_package_count || 0;
+  els.patchSummary.textContent = data.plan_error
+    ? "补丁准备失败"
+    : `${count} 张替换图 · ${packageCount} 个 FHM2D 包`;
+  els.patchMessage.textContent = data.running
+    ? `${data.label}：${data.message}`
+    : ["deploying", "rollback_failed"].includes(
+        data.latest_deployment?.status,
+      )
+      ? `检测到中断部署 · 请恢复 ${data.latest_deployment.package_count} 个包`
+      : data.latest_deployment?.status === "deployed"
+        ? `补丁已部署 · ${data.latest_deployment.package_count} 个包`
+      : data.latest_build?.current
+        ? `补丁已构建 · ${data.latest_build.package_count} 个包`
+        : data.plan_error || data.message || "等待操作";
+  els.patchPackages.textContent = data.affected_packages?.length
+    ? data.affected_packages.join("、")
+    : "没有待构建包";
+  els.buildPatchButton.disabled = data.running || !data.can_build;
+  els.deployPatchButton.disabled = data.running || !data.can_deploy;
+  els.restoreBackupButton.disabled = data.running || !data.can_restore;
+  els.patchLogButton.disabled = !data.log_lines?.length;
+  els.uploadButton.disabled = Boolean(data.running);
+  const target = targetLayer();
+  els.restoreButton.disabled =
+    Boolean(data.running) || !target?.replaced;
+
+  if (previous?.running && !data.running) {
+    showToast(
+      data.error ? data.error : `${previous.label}完成`,
+      Boolean(data.error),
+    );
+    loadMeta();
+    loadGroups();
+    if (state.selectedId) reloadComposition();
+  }
+}
+
+async function loadPatchStatus() {
+  try {
+    renderPatchStatus(await api("/api/patch/status"));
+  } catch (error) {
+    els.patchSummary.textContent = "无法读取补丁状态";
+    els.patchMessage.textContent = error.message;
+  } finally {
+    window.clearTimeout(loadPatchStatus.timer);
+    loadPatchStatus.timer = window.setTimeout(
+      loadPatchStatus,
+      state.patch?.running ? 800 : 2500,
+    );
+  }
+}
+
+async function startPatchAction(action) {
+  try {
+    const result = await api(`/api/patch/${action}`, { method: "POST" });
+    renderPatchStatus(result);
+    showToast(`${result.label}已开始`);
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+function openPatchConfirmation(action) {
+  const packageCount = state.patch?.affected_package_count || 0;
+  const packages = state.patch?.affected_packages?.join("、") || "-";
+  els.patchDialog.dataset.action = action;
+  els.patchDialog.returnValue = "";
+  els.patchDialogLog.hidden = true;
+  els.patchDialogMessage.hidden = false;
+  els.patchDialogCancel.hidden = false;
+  els.patchDialogConfirm.hidden = false;
+  if (action === "deploy") {
+    els.patchDialogTitle.textContent = "备份并部署补丁";
+    els.patchDialogMessage.textContent =
+      `将关闭状态下的游戏资源替换为最新构建，并先建立可恢复备份。\n` +
+      `涉及 ${packageCount} 个包：${packages}`;
+    els.patchDialogConfirm.textContent = "备份并部署";
+  } else {
+    const deployed = state.patch?.latest_deployment;
+    els.patchDialogTitle.textContent = "恢复最近备份";
+    els.patchDialogMessage.textContent =
+      `将恢复部署批次 ${deployed?.id || "-"} 中的原始游戏文件。\n` +
+      `涉及 ${deployed?.package_count || 0} 个包。`;
+    els.patchDialogConfirm.textContent = "恢复备份";
+  }
+  els.patchDialog.showModal();
+}
+
+function openPatchLog() {
+  els.patchDialog.dataset.action = "";
+  els.patchDialog.returnValue = "";
+  els.patchDialogTitle.textContent = state.patch?.label || "补丁日志";
+  els.patchDialogMessage.hidden = true;
+  els.patchDialogLog.hidden = false;
+  els.patchDialogLog.textContent =
+    state.patch?.log_lines?.join("\n") || "暂无日志";
+  els.patchDialogCancel.textContent = "关闭";
+  els.patchDialogCancel.hidden = false;
+  els.patchDialogConfirm.hidden = true;
+  els.patchDialog.showModal();
 }
 
 function renderCategoryTabs() {
@@ -275,7 +396,8 @@ function renderTarget() {
   `;
   els.uploadRule.textContent =
     `要求：RGBA PNG，${target.width}×${target.height}，不自动缩放`;
-  els.restoreButton.disabled = !target.replaced;
+  els.restoreButton.disabled =
+    Boolean(state.patch?.running) || !target.replaced;
 }
 
 function updateModifiedBadge() {
@@ -381,6 +503,7 @@ async function uploadReplacement(file) {
     await reloadComposition();
     await loadMeta();
     await loadGroups();
+    await loadPatchStatus();
     showToast(`已替换 ${roleLabels[target.role] || target.role}`);
   } catch (error) {
     showToast(error.message, true);
@@ -401,6 +524,7 @@ async function restoreTarget() {
     await reloadComposition();
     await loadMeta();
     await loadGroups();
+    await loadPatchStatus();
     showToast("已恢复原始图片");
   } catch (error) {
     showToast(error.message, true);
@@ -531,6 +655,23 @@ els.fileInput.addEventListener("change", () => {
   if (els.fileInput.files[0]) uploadReplacement(els.fileInput.files[0]);
 });
 els.restoreButton.addEventListener("click", restoreTarget);
+els.buildPatchButton.addEventListener(
+  "click", () => startPatchAction("build"),
+);
+els.deployPatchButton.addEventListener(
+  "click", () => openPatchConfirmation("deploy"),
+);
+els.restoreBackupButton.addEventListener(
+  "click", () => openPatchConfirmation("restore"),
+);
+els.patchLogButton.addEventListener("click", openPatchLog);
+els.patchDialog.addEventListener("close", () => {
+  const action = els.patchDialog.dataset.action;
+  els.patchDialogCancel.textContent = "取消";
+  if (els.patchDialog.returnValue === "confirm" && action) {
+    startPatchAction(action);
+  }
+});
 
 ["dragenter", "dragover"].forEach((name) => {
   els.dropZone.addEventListener(name, (event) => {
@@ -559,6 +700,7 @@ window.addEventListener("resize", () => {
 async function start() {
   try {
     await loadMeta();
+    await loadPatchStatus();
     await loadGroups();
     const initialId = new URLSearchParams(location.search).get("id");
     if (initialId) {
