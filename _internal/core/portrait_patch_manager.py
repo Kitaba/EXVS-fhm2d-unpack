@@ -62,6 +62,7 @@ class PortraitPatchManager:
         self.projects_root = self.root / "projects"
         self.outputs_root = self.root / "outputs"
         self.backups_root = self.root / "backups"
+        self.baselines_root = self.root / "baselines"
         self.manifests_root = self.root / "manifests"
         self.latest_build_path = self.root / "latest-build.json"
         self.latest_deployment_path = self.root / "latest-deployment.json"
@@ -413,6 +414,18 @@ class PortraitPatchManager:
     def _latest_build(self):
         return self._pointer_manifest(self.latest_build_path)
 
+    def _build_uses_current_baselines(self, build):
+        if not build:
+            return False
+        for item in build.get("packages", []):
+            expected = item.get("build_source_sha256")
+            baseline = self.baselines_root / f"{item.get('package', '')}.fhm2d"
+            if not expected or not baseline.is_file():
+                return False
+            if sha256_file(baseline) != expected:
+                return False
+        return True
+
     def summary(self):
         selected_packages = self._selected_packages()
         excluded_packages = self._excluded_packages()
@@ -435,6 +448,7 @@ class PortraitPatchManager:
             and build.get("status") == "built"
             and build.get("replacement_fingerprint")
             == current_fingerprint
+            and self._build_uses_current_baselines(build)
         )
         active_deployment = bool(
             deployment
@@ -580,7 +594,7 @@ class PortraitPatchManager:
         for index, item in enumerate(plan, 1):
             package = item["package"]
             source = item["source"]
-            build_source = source
+            installed_source = source
             if active and active.get("status") == "deployed":
                 deployed_item = next(
                     (
@@ -591,15 +605,25 @@ class PortraitPatchManager:
                     None,
                 )
                 if deployed_item:
-                    build_source = self.safe_join(
+                    installed_source = self.safe_join(
                         self.workspace, deployed_item["backup"]
                     )
-                    if not build_source.is_file():
+                    if not installed_source.is_file():
                         raise FileNotFoundError(
                             f"活动部署的备份文件不存在：{package}"
                         )
-            source_hash = sha256_file(build_source)
-            self.append(f"[{index}/{len(plan)}] 导出 {package}")
+            installed_source_hash = sha256_file(installed_source)
+            self.baselines_root.mkdir(parents=True, exist_ok=True)
+            build_source = self.baselines_root / f"{package}.fhm2d"
+            if not build_source.is_file():
+                self._atomic_install(
+                    installed_source, build_source, installed_source_hash
+                )
+                self.append(f"{package}：已保存首次构建基底")
+            build_source_hash = sha256_file(build_source)
+            self.append(
+                f"[{index}/{len(plan)}] 从固定基底导出 {package}"
+            )
             _, project_dir = export_project(
                 build_source,
                 self.projects_root,
@@ -663,7 +687,11 @@ class PortraitPatchManager:
                 {
                     "package": package,
                     "source": self.relative_to(source, self.game_root),
-                    "source_sha256": source_hash,
+                    "source_sha256": installed_source_hash,
+                    "build_source": self.relative_to(
+                        build_source, self.workspace
+                    ),
+                    "build_source_sha256": build_source_hash,
                     "output": self.relative_to(output, self.workspace),
                     "output_sha256": sha256_file(output),
                     "modified_texture_count": report[
@@ -719,6 +747,8 @@ class PortraitPatchManager:
         build_path, build = self._latest_build()
         if not build or build.get("status") != "built":
             raise ValueError("没有可部署的构建结果")
+        if not self._build_uses_current_baselines(build):
+            raise ValueError("构建基底已变化，请重新构建补丁")
         plan = self.collect_plan()
         if build.get("replacement_fingerprint") != self._fingerprint(plan):
             raise ValueError("替换图已变化，请重新构建补丁")
