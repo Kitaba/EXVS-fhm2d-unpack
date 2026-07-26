@@ -622,18 +622,19 @@ class PortraitPatchManager:
                 replacement["texture_id"]
                 for replacement in item["replacements"]
             }
-            modified_keys = {
-                f"{package}/{next(
+            modified_keys = set()
+            for row in modified:
+                mapping_group = next(
                     (
-                        mapping_group
-                        for mapping_group, project_group in group_aliases.items()
+                        candidate
+                        for candidate, project_group in group_aliases.items()
                         if project_group == row["group_label"]
                     ),
                     row["group_label"],
-                )}/"
-                f"{row['embedded_index']:05d}"
-                for row in modified
-            }
+                )
+                modified_keys.add(
+                    f"{package}/{mapping_group}/{int(row['embedded_index']):05d}"
+                )
             unchanged = sorted(expected_ids - modified_keys)
             if unchanged:
                 self.append(
