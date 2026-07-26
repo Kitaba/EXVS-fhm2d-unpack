@@ -14,7 +14,7 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 
 ACTION_LABELS = {
@@ -37,13 +37,11 @@ class JobManager:
         self.core_root = Path(core_root).resolve()
         self.texture_root = self.workspace / "all-textures"
         self.mapping_root = self.workspace / "asset-mapping"
-        self.single_project_root = self.workspace / "single-projects"
         self.log_root = self.workspace / "logs"
         self.source_root = (
             self.game_root / "data" / "x64" / "dplcache_release"
         )
         self.workspace.mkdir(parents=True, exist_ok=True)
-        self.single_project_root.mkdir(parents=True, exist_ok=True)
         self.log_root.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
         self.process = None
@@ -60,7 +58,6 @@ class JobManager:
             "return_code": None,
             "message": "等待操作",
             "log_file": None,
-            "result_path": None,
         }
         self.lines = deque(maxlen=500)
         self.prebuilt_database = self.read_prebuilt_database()
@@ -211,7 +208,6 @@ class JobManager:
                     "return_code": None,
                     "message": "正在准备任务",
                     "log_file": str(log_path),
-                    "result_path": None,
                 }
             )
         self.thread = threading.Thread(
@@ -221,192 +217,6 @@ class JobManager:
         )
         self.thread.start()
         return self.status()
-
-    def resolve_single_source(self, value):
-        value = str(value or "").strip().strip('"')
-        if not value:
-            raise ValueError("请选择或输入一个 FHM2D 文件")
-        path = Path(value)
-        if not path.is_absolute():
-            path = self.source_root / path
-        path = path.resolve()
-        if path.suffix.lower() != ".fhm2d":
-            raise ValueError("源文件扩展名必须是 .fhm2d")
-        if not path.is_file():
-            raise FileNotFoundError(f"未找到 FHM2D：{path}")
-        return path
-
-    def resolve_project_root(self, value):
-        value = str(value or "").strip().strip('"')
-        root = (
-            Path(value).resolve()
-            if value
-            else self.single_project_root
-        )
-        source_root = self.source_root.resolve()
-        if root == source_root or source_root in root.parents:
-            raise ValueError("工程根目录不能放在游戏资源目录内")
-        return root
-
-    def resolve_single_project(self, value):
-        value = str(value or "").strip().strip('"')
-        if not value:
-            raise ValueError("请选择或输入一个回包工程")
-        path = Path(value)
-        if not path.is_absolute():
-            path = self.single_project_root / path
-        path = path.resolve()
-        if not (path / "project.json").is_file():
-            raise FileNotFoundError(f"工程缺少 project.json：{path}")
-        return path
-
-    def start_single_extract(self, payload):
-        source = self.resolve_single_source(payload.get("source"))
-        output_root = self.resolve_project_root(payload.get("output_root"))
-        project_dir = output_root / source.stem
-        command = [
-            sys.executable,
-            str(self.core_root / "fhm2d_texture_workflow.py"),
-            "export",
-            str(source),
-            "-o",
-            str(output_root),
-            "--texconv",
-            str(self.core_root / "tools" / "texconv.exe"),
-        ]
-        if payload.get("overwrite"):
-            command.append("--force")
-        return self.start_command(
-            "single_extract",
-            f"提取 {source.name}",
-            "提取 DDS 并生成可编辑 PNG",
-            command,
-            project_dir,
-        )
-
-    def start_single_build(self, payload):
-        project_dir = self.resolve_single_project(payload.get("project"))
-        project = json.loads(
-            (project_dir / "project.json").read_text(encoding="utf-8")
-        )
-        source = Path(project.get("source", "")).resolve()
-        output_value = str(payload.get("output") or "").strip().strip('"')
-        if output_value:
-            output = Path(output_value)
-            if not output.is_absolute():
-                output = project_dir / "build" / output
-            output = output.resolve()
-        else:
-            output = project_dir / "build" / project["source_name"]
-        if output.suffix.lower() != ".fhm2d":
-            raise ValueError("回包输出扩展名必须是 .fhm2d")
-        if output.resolve() == source:
-            raise ValueError("不能覆盖工程记录的原始 FHM2D")
-        command = [
-            sys.executable,
-            str(self.core_root / "fhm2d_texture_workflow.py"),
-            "build",
-            str(project_dir),
-            "-o",
-            str(output),
-            "--texconv",
-            str(self.core_root / "tools" / "texconv.exe"),
-        ]
-        if payload.get("overwrite"):
-            command.append("--force")
-        return self.start_command(
-            "single_build",
-            f"回包 {project_dir.name}",
-            "验证 PNG 并重建 FHM2D",
-            command,
-            output,
-        )
-
-    def start_command(self, action, label, stage, command, result_path):
-        with self.lock:
-            if self.state["running"]:
-                raise ValueError("已有任务正在运行")
-            now = datetime.now()
-            log_path = self.log_root / (
-                f"{now.strftime('%Y%m%d_%H%M%S')}_{action}.log"
-            )
-            self.lines.clear()
-            self.state.update(
-                {
-                    "running": True,
-                    "action": action,
-                    "label": label,
-                    "stage": stage,
-                    "stage_index": 1,
-                    "stage_count": 1,
-                    "started_at": now.isoformat(timespec="seconds"),
-                    "finished_at": None,
-                    "return_code": None,
-                    "message": "正在准备任务",
-                    "log_file": str(log_path),
-                    "result_path": str(result_path),
-                }
-            )
-        self.thread = threading.Thread(
-            target=self._command_worker,
-            args=(label, command, log_path, Path(result_path)),
-            daemon=True,
-        )
-        self.thread.start()
-        return self.status()
-
-    def _command_worker(self, label, command, log_path, result_path):
-        final_code = 0
-        with log_path.open("w", encoding="utf-8") as log_stream:
-            self.append(f"开始：{label}", log_stream)
-            self.append(f"目标：{result_path}", log_stream)
-            env = os.environ.copy()
-            env["PYTHONUTF8"] = "1"
-            env["PYTHONUNBUFFERED"] = "1"
-            try:
-                process = subprocess.Popen(
-                    command,
-                    cwd=self.game_root,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                    env=env,
-                    creationflags=(
-                        subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-                    ),
-                )
-                with self.lock:
-                    self.process = process
-                for line in process.stdout:
-                    self.append(line, log_stream)
-                final_code = process.wait()
-            except Exception as exc:
-                self.append(f"{type(exc).__name__}: {exc}", log_stream)
-                final_code = 2
-            finally:
-                with self.lock:
-                    self.process = None
-            if final_code == 0:
-                self.append(f"任务完成：{result_path}", log_stream)
-            else:
-                self.append(f"任务失败，返回码 {final_code}", log_stream)
-        with self.lock:
-            self.state.update(
-                {
-                    "running": False,
-                    "finished_at": datetime.now().isoformat(
-                        timespec="seconds"
-                    ),
-                    "return_code": final_code,
-                    "message": (
-                        f"任务完成：{result_path}"
-                        if final_code == 0
-                        else f"任务失败，返回码 {final_code}"
-                    ),
-                }
-            )
 
     def _worker(self, action, stages, log_path):
         final_code = 0
@@ -518,97 +328,6 @@ class JobManager:
                 texture_count = sum(1 for _ in csv.DictReader(stream))
         return package_count, supported, texture_count
 
-    def single_projects(self):
-        projects = []
-        for manifest_path in sorted(
-            self.single_project_root.glob("*/project.json")
-        ):
-            try:
-                manifest = json.loads(
-                    manifest_path.read_text(encoding="utf-8")
-                )
-                project_dir = manifest_path.parent.resolve()
-                projects.append(
-                    {
-                        "name": project_dir.name,
-                        "path": str(project_dir),
-                        "source_name": manifest.get("source_name", ""),
-                        "texture_count": int(
-                            manifest.get("texture_count", 0)
-                        ),
-                        "png_directory": str(project_dir / "png_edit"),
-                        "default_output": str(
-                            project_dir
-                            / "build"
-                            / manifest.get(
-                                "source_name", f"{project_dir.name}.fhm2d"
-                            )
-                        ),
-                    }
-                )
-            except (OSError, ValueError, TypeError):
-                continue
-        return projects
-
-    def package_choices(self, query=""):
-        if not self.source_root.is_dir():
-            return []
-        query = query.strip().lower()
-        choices = []
-        for path in self.source_root.glob("*.fhm2d"):
-            if query and query not in path.name.lower():
-                continue
-            choices.append(
-                {"name": path.name, "path": str(path.resolve())}
-            )
-            if len(choices) >= 100:
-                break
-        return sorted(choices, key=lambda item: item["name"])
-
-    @staticmethod
-    def native_browse(kind):
-        if os.name != "nt":
-            raise OSError("当前系统不支持原生路径选择")
-        if kind == "fhm2d":
-            script = (
-                "Add-Type -AssemblyName System.Windows.Forms;"
-                "$OutputEncoding=[Console]::OutputEncoding="
-                "[System.Text.UTF8Encoding]::new();"
-                "$d=New-Object System.Windows.Forms.OpenFileDialog;"
-                "$d.Filter='FHM2D (*.fhm2d)|*.fhm2d|All files (*.*)|*.*';"
-                "if($d.ShowDialog() -eq "
-                "[System.Windows.Forms.DialogResult]::OK){$d.FileName}"
-            )
-        elif kind == "folder":
-            script = (
-                "Add-Type -AssemblyName System.Windows.Forms;"
-                "$OutputEncoding=[Console]::OutputEncoding="
-                "[System.Text.UTF8Encoding]::new();"
-                "$d=New-Object System.Windows.Forms.FolderBrowserDialog;"
-                "if($d.ShowDialog() -eq "
-                "[System.Windows.Forms.DialogResult]::OK){$d.SelectedPath}"
-            )
-        else:
-            raise ValueError("未知路径选择类型")
-        result = subprocess.run(
-            [
-                "powershell.exe",
-                "-NoProfile",
-                "-STA",
-                "-WindowStyle",
-                "Hidden",
-                "-Command",
-                script,
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        if result.returncode:
-            raise OSError(result.stderr.strip() or "无法打开路径选择器")
-        return result.stdout.strip()
-
     def status(self):
         with self.lock:
             state = dict(self.state)
@@ -634,7 +353,6 @@ class JobManager:
                 "game_root": str(self.game_root),
                 "source_root": str(self.source_root),
                 "workspace": str(self.workspace),
-                "single_project_root": str(self.single_project_root),
                 "source_exists": self.source_root.is_dir(),
                 "package_count": package_count,
                 "supported_package_count": supported,
@@ -679,15 +397,6 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/status":
             return self.json_response(self.manager.status())
-        if parsed.path == "/api/single/projects":
-            return self.json_response(
-                {"projects": self.manager.single_projects()}
-            )
-        if parsed.path == "/api/single/packages":
-            query = parse_qs(parsed.query).get("q", [""])[0]
-            return self.json_response(
-                {"packages": self.manager.package_choices(query)}
-            )
         if parsed.path.startswith("/api/"):
             return self.json_response(
                 {"error": "API 不存在"}, HTTPStatus.NOT_FOUND
@@ -706,29 +415,6 @@ class Handler(SimpleHTTPRequestHandler):
                 )
             if parsed.path == "/api/cancel":
                 return self.json_response(self.manager.cancel())
-            if parsed.path == "/api/single/extract":
-                return self.json_response(
-                    self.manager.start_single_extract(self.read_json()),
-                    HTTPStatus.ACCEPTED,
-                )
-            if parsed.path == "/api/single/build":
-                return self.json_response(
-                    self.manager.start_single_build(self.read_json()),
-                    HTTPStatus.ACCEPTED,
-                )
-            if parsed.path == "/api/open-folder":
-                path = Path(self.read_json().get("path", "")).resolve()
-                if not path.is_dir():
-                    raise FileNotFoundError(f"目录不存在：{path}")
-                if os.name != "nt":
-                    raise OSError("当前系统不支持打开资源管理器")
-                os.startfile(path)
-                return self.json_response({"ok": True})
-            if parsed.path == "/api/browse":
-                kind = self.read_json().get("kind", "")
-                return self.json_response(
-                    {"path": self.manager.native_browse(kind)}
-                )
             return self.json_response(
                 {"error": "API 不存在"}, HTTPStatus.NOT_FOUND
             )
@@ -743,9 +429,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="EXVS portable single-file unpack/repack tool"
-    )
+    parser = argparse.ArgumentParser(description="EXVSIB portable unpack tool")
     parser.add_argument("--game-root", required=True)
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--core", required=True)
@@ -760,7 +444,7 @@ def main():
     )
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     url = f"http://{args.host}:{args.port}"
-    print(f"EXVS single-file unpack/repack tool: {url}", flush=True)
+    print(f"EXVSIB unpack tool: {url}", flush=True)
     if args.open_browser and not os.environ.get("EXVSIB_NO_BROWSER"):
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
     try:

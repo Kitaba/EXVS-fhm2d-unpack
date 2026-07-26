@@ -10,7 +10,7 @@
                 },
     "root_launchers":  [
                            "启动立绘查看器.bat",
-                           "启动单文件解包压缩工具.bat"
+                           "启动解包工具.bat"
                        ],
     "core_scripts":  [
                          "fhm2d_unpack.py",

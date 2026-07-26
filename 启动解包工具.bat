@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title EXVS Single FHM2D Unpack Repack Tool
+title EXVSIB Texture Unpack Tool
 
 set "ROOT=%~dp0"
 set "PYTHON=%ROOT%_internal\python\python.exe"

@@ -3,21 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>单文件解包压缩工具</title>
+  <title>EXVSIB 纹理解包器</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header>
     <div class="brand-mark">IB</div>
     <div>
-      <h1>单文件解包压缩工具</h1>
+      <h1>纹理解包器</h1>
       <p>FHM2D · DDS · PNG · 人物映射</p>
     </div>
     <div id="connection" class="connection"><i></i>本地工作区</div>
   </header>
 
   <main>
-    <section id="librarySummary" class="summary-band hidden">
+    <section class="summary-band">
       <div>
         <span>游戏资源</span>
         <strong id="sourceState">检查中</strong>
@@ -45,91 +45,8 @@
       </div>
     </section>
 
-    <nav class="view-tabs" aria-label="工具模式">
-      <button class="active" data-view="single">单文件解包压缩</button>
-      <button data-view="library">完整资源库</button>
-    </nav>
-
     <div class="content-grid">
-      <section id="singleOperations" class="operations single-operations">
-        <div class="section-heading">
-          <div>
-            <span>单文件工程</span>
-            <h2>提取与回包</h2>
-          </div>
-          <span class="safe-label">不覆盖游戏源文件</span>
-        </div>
-
-        <div class="tool-block">
-          <div class="tool-title">
-            <span class="step-number">01</span>
-            <div>
-              <strong>提取 FHM2D</strong>
-              <small>生成 DDS、RGBA PNG 和工程清单</small>
-            </div>
-          </div>
-          <label for="singleSource">源 FHM2D</label>
-          <div class="field-row">
-            <input id="singleSource" list="packageChoices" placeholder="输入完整路径，或选择游戏资源包">
-            <button id="browseSource" class="icon-command">浏览</button>
-            <button id="refreshPackages" class="icon-command" title="刷新游戏资源包">刷新</button>
-          </div>
-          <datalist id="packageChoices"></datalist>
-          <label for="singleOutputRoot">工程根目录</label>
-          <div class="field-row">
-            <input id="singleOutputRoot" placeholder="默认使用 workspace\single-projects">
-            <button id="browseOutputRoot" class="icon-command">浏览</button>
-          </div>
-          <label class="check-row">
-            <input id="extractOverwrite" type="checkbox">
-            <span>覆盖同名工程及其中的编辑图片</span>
-          </label>
-          <button id="extractSingle" class="command-primary">提取为编辑工程</button>
-        </div>
-
-        <div class="tool-block">
-          <div class="tool-title">
-            <span class="step-number">02</span>
-            <div>
-              <strong>编辑 PNG</strong>
-              <small>保持文件名、尺寸和 RGBA 8-bit 格式</small>
-            </div>
-          </div>
-          <label for="singleProject">回包工程</label>
-          <div class="field-row">
-            <input id="singleProject" list="projectChoices" placeholder="选择已有工程，或输入包含 project.json 的目录">
-            <button id="browseProject" class="icon-command">浏览</button>
-            <button id="refreshProjects" class="icon-command" title="刷新工程列表">刷新</button>
-          </div>
-          <datalist id="projectChoices"></datalist>
-          <div class="inline-actions">
-            <button id="openPngDirectory">打开 PNG 目录</button>
-            <span id="projectMeta">尚未选择工程</span>
-          </div>
-        </div>
-
-        <div class="tool-block">
-          <div class="tool-title">
-            <span class="step-number">03</span>
-            <div>
-              <strong>重建 FHM2D</strong>
-              <small>只替换发生变化的纹理数据</small>
-            </div>
-          </div>
-          <label for="singleBuildOutput">输出文件</label>
-          <input id="singleBuildOutput" placeholder="默认输出到工程的 build 目录">
-          <label class="check-row">
-            <input id="buildOverwrite" type="checkbox">
-            <span>覆盖已经生成的回包文件</span>
-          </label>
-          <div class="build-actions">
-            <button id="buildSingle" class="command-primary">构建 FHM2D</button>
-            <button id="openBuildDirectory">打开输出目录</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="libraryOperations" class="operations hidden">
+      <section class="operations">
         <div class="section-heading">
           <div>
             <span>工作流</span>
