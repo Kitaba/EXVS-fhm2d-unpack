@@ -23,11 +23,11 @@ def decode_container(input_path):
     blob = input_path.read_bytes()
     header = read_header(blob)
     blocks = []
-    trailing_offset = len(blob)
+    stream_trailing_offset = len(blob)
 
     for index, file_offset, compressed_size, data in iter_deflate_blocks(blob):
         if index is None:
-            trailing_offset = file_offset
+            stream_trailing_offset = file_offset
             break
         blocks.append(
             {
@@ -49,9 +49,10 @@ def decode_container(input_path):
     declared_payload_size = struct.unpack_from("<Q", index_block["data"], 0x34)[0]
     payload_blocks = []
     payload_size = 0
-    trailing_offset = len(blob)
+    trailing_offset = stream_trailing_offset
     for position, block in enumerate(blocks[1:], 1):
         if payload_size + block["uncompressed_size"] > declared_payload_size:
+            trailing_offset = block["file_offset"]
             break
         payload_blocks.append(block)
         payload_size += block["uncompressed_size"]
@@ -59,7 +60,7 @@ def decode_container(input_path):
             trailing_offset = (
                 blocks[position + 1]["file_offset"]
                 if position + 1 < len(blocks)
-                else len(blob)
+                else stream_trailing_offset
             )
             break
     tolerated_padding = (
@@ -164,7 +165,7 @@ def find_trailing_offset_references(index_data, compressed_size, trailing_size):
     upper_bound = compressed_size + trailing_size
     for offset in range(9, len(index_data) - 3):
         value = struct.unpack_from("<I", index_data, offset)[0]
-        if not compressed_size <= value < upper_bound:
+        if not compressed_size <= value <= upper_bound:
             continue
         record_start = offset - 9
         if (
@@ -320,8 +321,10 @@ def rebuild_container(container, payload):
 
 def verify_rebuilt(original_container, rebuilt, expected_payload):
     all_rebuilt_blocks = []
+    stream_trailing_offset = len(rebuilt)
     for index, file_offset, compressed_size, data in iter_deflate_blocks(rebuilt):
         if index is None:
+            stream_trailing_offset = file_offset
             break
         all_rebuilt_blocks.append(
             {
@@ -340,7 +343,7 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
     trailing_offset = (
         all_rebuilt_blocks[expected_block_count]["file_offset"]
         if len(all_rebuilt_blocks) > expected_block_count
-        else len(rebuilt)
+        else stream_trailing_offset
     )
     rebuilt_payload_blocks = rebuilt_blocks[1:]
     rebuilt_payload = b"".join(block["data"] for block in rebuilt_payload_blocks)
