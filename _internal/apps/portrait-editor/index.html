@@ -32,7 +32,10 @@
       <details class="payload-guidance">
         <summary>回包检查</summary>
         <div class="payload-guidance-popover">
-          <strong>出现 payload size mismatch 时，请检查：</strong>
+          <div class="payload-guidance-heading">
+            <strong>出现 payload size mismatch 时，请检查：</strong>
+            <button id="closePayloadGuidance" class="payload-guidance-close" type="button" title="关闭提示" aria-label="关闭提示">×</button>
+          </div>
           <ul>
             <li>PNG 尺寸必须保持原值：872×960、260×180 或 572×572。</li>
             <li>DDS 格式必须与原图一致，原图为 BC7_UNORM 时不要改成 BC3 或 RGBA8。</li>

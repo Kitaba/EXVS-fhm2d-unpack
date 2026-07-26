@@ -385,6 +385,10 @@ class PortraitPatchManager:
             and deployment.get("status")
             in {"deploying", "deployed", "rollback_failed"}
         )
+        can_build_while_deployed = (
+            deployment
+            and deployment.get("status") == "deployed"
+        )
         return {
             **state,
             "log_lines": lines,
@@ -423,7 +427,11 @@ class PortraitPatchManager:
                 if deployment
                 else None
             ),
-            "can_build": bool(plan) and not active_deployment,
+            # A completed deployment can serve as the base for preparing the
+            # next build. Deploying it still requires restoring the current
+            # backup first; interrupted or failed rollbacks remain locked.
+            "can_build": bool(plan)
+            and (not active_deployment or can_build_while_deployed),
             "can_deploy": build_current and not active_deployment,
             "can_restore": active_deployment,
         }
@@ -447,7 +455,7 @@ class PortraitPatchManager:
         }
         if not allowed[action]:
             reasons = {
-                "build": "没有可构建的替换图，或游戏中已有活动补丁",
+                "build": "没有可构建的替换图，或当前部署未完成恢复",
                 "deploy": "没有与当前替换图匹配的最新构建",
                 "restore": "没有可恢复的活动备份",
             }
@@ -493,8 +501,9 @@ class PortraitPatchManager:
             )
 
     def _build(self):
-        if self._active_deployment()[1]:
-            raise ValueError("游戏中已有活动补丁，请先恢复备份")
+        _, active = self._active_deployment()
+        if active and active.get("status") != "deployed":
+            raise ValueError("当前部署未完成恢复，暂不能构建新补丁")
         plan = self.collect_plan()
         if not plan:
             raise ValueError("没有替换图可供构建")
@@ -514,10 +523,28 @@ class PortraitPatchManager:
         for index, item in enumerate(plan, 1):
             package = item["package"]
             source = item["source"]
-            source_hash = sha256_file(source)
+            build_source = source
+            if active and active.get("status") == "deployed":
+                deployed_item = next(
+                    (
+                        row
+                        for row in active.get("packages", [])
+                        if row.get("package") == package
+                    ),
+                    None,
+                )
+                if deployed_item:
+                    build_source = self.safe_join(
+                        self.workspace, deployed_item["backup"]
+                    )
+                    if not build_source.is_file():
+                        raise FileNotFoundError(
+                            f"活动部署的备份文件不存在：{package}"
+                        )
+            source_hash = sha256_file(build_source)
             self.append(f"[{index}/{len(plan)}] 导出 {package}")
             _, project_dir = export_project(
-                source,
+                build_source,
                 self.projects_root,
                 self.texconv,
                 force=True,

@@ -193,6 +193,29 @@ h2 {
   display: block;
 }
 
+.payload-guidance-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.payload-guidance-close {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 18px;
+}
+
+.payload-guidance-close:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .payload-guidance-popover ul {
   margin: 6px 0;
   padding-left: 18px;

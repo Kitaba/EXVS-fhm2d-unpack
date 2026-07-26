@@ -13,8 +13,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from texture_layout import PACKAGE_CATEGORIES, PACKAGE_ROOT_NAME
+
 
 MAPPING_VERSION = 1
+PACKAGE_LAYOUT_VERSION = 1
 BODY_CATEGORIES = {
     (872, 960): "outgame_navigator",
     (572, 572): "combat_portrait",
@@ -778,6 +781,13 @@ def build_command(args):
         "projects_directory": "projects",
         "previews_directory": "previews",
         "replacement_directory": "replacements",
+        "package_layout_version": PACKAGE_LAYOUT_VERSION,
+        "package_directory_template": (
+            f"{PACKAGE_ROOT_NAME}/{{category}}/{{package}}"
+        ),
+        "package_category_directories": {
+            category: category for category in PACKAGE_CATEGORIES
+        },
         "compositions": compositions,
     }
     write_json(output_root / "mapping.json", report)

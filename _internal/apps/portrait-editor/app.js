@@ -178,7 +178,7 @@ function renderPatchStatus(data) {
         )
         ? `检测到中断部署 · 请恢复 ${data.latest_deployment.package_count} 个包`
         : data.latest_deployment?.status === "deployed"
-          ? `补丁已部署 · ${data.latest_deployment.package_count} 个包`
+          ? `补丁已部署 · 可继续构建新版本；重新部署前请恢复备份`
           : data.latest_build?.current
             ? `补丁已构建 · ${data.latest_build.package_count} 个包`
             : data.plan_error || data.message || "等待操作";
@@ -759,6 +759,11 @@ els.buildPatchButton.addEventListener("click", () => startPatchAction("build"));
 els.deployPatchButton.addEventListener("click", () => openPatchConfirmation("deploy"));
 els.restoreBackupButton.addEventListener("click", () => openPatchConfirmation("restore"));
 els.patchLogButton.addEventListener("click", openPatchLog);
+document.querySelector("#closePayloadGuidance")?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  document.querySelector(".payload-guidance")?.removeAttribute("open");
+});
 els.patchDialog.addEventListener("close", () => {
   const action = els.patchDialog.dataset.action;
   els.patchDialogCancel.textContent = "取消";

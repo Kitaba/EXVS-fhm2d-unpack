@@ -157,7 +157,7 @@ class PortraitData:
         )
         return {
             "title": "EXVSIB 立绘编辑器",
-            "patch_api_version": 1,
+            "patch_api_version": 2,
             "workspace": str(self.mapping_root.parent),
             "mapping_version": self.mapping["mapping_version"],
             "group_count": self.mapping["group_count"],
