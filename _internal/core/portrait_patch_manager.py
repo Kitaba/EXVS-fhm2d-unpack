@@ -683,6 +683,15 @@ class PortraitPatchManager:
             report = build_project(
                 project_dir, output, self.texconv, force=False
             )
+            normalized_pixels = sum(
+                row.get("normalized_transparent_pixels", 0)
+                for row in report.get("modified_textures", [])
+            )
+            if normalized_pixels:
+                self.append(
+                    f"{package}：透明区规范化处理 "
+                    f"{normalized_pixels} 个远端透明像素"
+                )
             packages.append(
                 {
                     "package": package,

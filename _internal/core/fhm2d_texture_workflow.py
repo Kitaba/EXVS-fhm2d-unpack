@@ -11,6 +11,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 
+from PIL import Image, ImageChops, ImageFilter
+
 from png_color_profile import retag_png_srgb
 
 from fhm2d_dds_match import parse_dds
@@ -24,6 +26,7 @@ from fhm2d_repack import decode_container, repack_file
 
 
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+TRANSPARENT_EDGE_GUARD = 4
 
 
 def sha256_file(path):
@@ -299,12 +302,38 @@ def project_status(project_dir):
     return project, source_path, textures, rows
 
 
+def normalize_png_for_encoding(source, destination):
+    """Clear hidden RGB away from alpha edges without changing visible pixels."""
+    with Image.open(source) as opened:
+        image = opened.convert("RGBA")
+    alpha = image.getchannel("A")
+    visible = alpha.point(lambda value: 255 if value else 0)
+    protected = visible.filter(
+        ImageFilter.MaxFilter(TRANSPARENT_EDGE_GUARD * 2 + 1)
+    )
+    clear_mask = ImageChops.invert(protected)
+    normalized = Image.composite(
+        Image.new("RGBA", image.size, (0, 0, 0, 0)),
+        image,
+        clear_mask,
+    )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    normalized.save(destination, format="PNG", compress_level=9)
+    return clear_mask.histogram()[255]
+
+
 def convert_changed_pngs(texconv, project_dir, changed_rows, dds_dir):
     dds_dir.mkdir(parents=True, exist_ok=True)
     png_dir = project_dir / "png_edit"
+    normalized_dir = dds_dir.parent / "png_normalized"
+    clear_directory(normalized_dir, project_dir)
 
     def encode(row):
         png_path = png_dir / row["png_file"]
+        normalized_path = normalized_dir / row["png_file"]
+        normalized_pixels = normalize_png_for_encoding(
+            png_path, normalized_path
+        )
         texture_format = int(row["fhm2d_format"])
         if texture_format == FHM2D_BC7_FORMAT:
             texconv_format = "BC7_UNORM"
@@ -334,7 +363,7 @@ def convert_changed_pngs(texconv, project_dir, changed_rows, dds_dir):
                 "--ignore-srgb",
                 "-o",
                 dds_dir,
-                png_path,
+                normalized_path,
             ],
         )
         dds_path = dds_dir / png_path.with_suffix(".dds").name
@@ -354,7 +383,11 @@ def convert_changed_pngs(texconv, project_dir, changed_rows, dds_dir):
                 f"encoded DDS format {dds['dxgi_format']} does not match "
                 f"expected DXGI {expected_dxgi}"
             )
-        return str(row["texture_index"]), {"path": dds_path, "dds": dds}
+        return str(row["texture_index"]), {
+            "path": dds_path,
+            "dds": dds,
+            "normalized_transparent_pixels": normalized_pixels,
+        }
 
     encoded = {}
     worker_count = min(4, len(changed_rows))
@@ -419,6 +452,9 @@ def build_project(project_dir, output_path, texconv, force=False):
                 "original_bc7_sha256": original_pixel_hash,
                 "modified_bc7_sha256": hashlib.sha256(top_mip).hexdigest(),
                 "encoded_dds": str(item["path"].relative_to(project_dir)),
+                "normalized_transparent_pixels": item[
+                    "normalized_transparent_pixels"
+                ],
             }
         )
 
