@@ -1,0 +1,55 @@
+{
+  "mapping_version": 1,
+  "validated_utc": "2026-07-25T07:33:17.537724+00:00",
+  "mapping": "D:\\BaiduNetdiskDownload\\ib1.0.4\\EXVS_Texture_Toolkit\\workspace\\asset-mapping\\mapping.json",
+  "status": "ok",
+  "group_count": 1297,
+  "layer_count": 18668,
+  "source_png_count": 18668,
+  "preview_count": 0,
+  "category_counts": {
+    "combat_portrait": 357,
+    "ingame_navigator": 52,
+    "outgame_navigator": 888
+  },
+  "family_counts": {
+    "combat_portrait:mouth": 351,
+    "combat_portrait:mouth_1": 6,
+    "combat_portrait:mouth_2": 6,
+    "ingame_navigator:expression": 1,
+    "ingame_navigator:face_eyes": 51,
+    "ingame_navigator:mouth": 51,
+    "outgame_navigator:expression": 2,
+    "outgame_navigator:face_eyes": 879,
+    "outgame_navigator:mouth": 879
+  },
+  "warning_count": 3,
+  "warnings": [
+    "combat_portrait/0x1454D5E7/g00: mouth stable-border RMSE is high: 70.31",
+    "combat_portrait/0x4582679F/g00: mouth stable-border RMSE is high: 74.64",
+    "combat_portrait/0xA9EA731E/g00: mouth stable-border RMSE is high: 62.64"
+  ],
+  "exception_count": 2,
+  "exceptions": [
+    {
+      "package": "0x0255A27A",
+      "group": "g00",
+      "candidate_category": "ingame_navigator",
+      "body_count": "3",
+      "bc7_body_count": "3",
+      "group_texture_count": "9",
+      "reason": "target dimensions found but group structure is ambiguous"
+    },
+    {
+      "package": "0xEF170E82",
+      "group": "g00",
+      "candidate_category": "combat_portrait",
+      "body_count": "1",
+      "bc7_body_count": "0",
+      "group_texture_count": "72",
+      "reason": "target dimensions found but group structure is ambiguous"
+    }
+  ],
+  "problem_count": 0,
+  "problems": []
+}

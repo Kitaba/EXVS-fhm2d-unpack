@@ -1,5 +1,14 @@
 workspace/*
 !workspace/README.txt
+!workspace/asset-mapping/
+!workspace/asset-mapping/**
+workspace/asset-mapping/replacements/
+workspace/asset-mapping/replacement-previews/
+workspace/asset-mapping/preview-cache/
+workspace/asset-mapping/replan-backups/
+workspace/asset-mapping/replan-manifest.json
+workspace/asset-mapping/validation-replan.json
+workspace/all-textures/
 **/__pycache__/
 *.py[cod]
 *.log

@@ -1,0 +1,3 @@
+﻿package,group,candidate_category,body_count,bc7_body_count,group_texture_count,reason
+0x0255A27A,g00,ingame_navigator,3,3,9,target dimensions found but group structure is ambiguous
+0xEF170E82,g00,combat_portrait,1,0,72,target dimensions found but group structure is ambiguous
