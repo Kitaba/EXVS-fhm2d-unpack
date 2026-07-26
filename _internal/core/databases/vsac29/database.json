@@ -1,9 +1,11 @@
 {
-  "database_version": 1,
+  "database_version": 2,
   "game_version": "vsac29",
   "created_utc": "2026-07-25T03:48:35.700954+00:00",
   "catalog_signature_algorithm": "stable_texture_catalog_v1",
   "catalog_signature": "b34d67df5bde3909508b003abc54aae719a1ebdc998837f4bb01b7950b34331b",
+  "catalog_layout_signature_algorithm": "stable_texture_layout_v1",
+  "catalog_layout_signature": "ee53f5873caadbe69f2fd321d3cca1ce361e8324c865611ae2a7d51ea3471e6a",
   "texture_count": 40325,
   "group_count": 1297,
   "layer_count": 18668,
