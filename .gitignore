@@ -11,6 +11,16 @@ workspace/asset-mapping/validation-replan.json
 workspace/all-textures/
 **/__pycache__/
 *.py[cod]
+!_internal/python/*.exe
+!_internal/python/*.dll
+!_internal/python/*.pyd
+!_internal/python/*.zip
+!_internal/python/*.cat
+!_internal/python/*._pth
+!_internal/python/**/*.dll
+!_internal/python/**/*.pyd
+!_internal/python/**/*.exe
+!_internal/python/**/*.zip
 *.log
 *.tmp
 *.tmp.png
