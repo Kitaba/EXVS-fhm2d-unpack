@@ -514,6 +514,13 @@ class PortraitHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/patch/selection/clear":
+            try:
+                return self.json_response(
+                    self.patch_manager.clear_package_selection()
+                )
+            except ValueError as exc:
+                return self.error_response(exc, HTTPStatus.CONFLICT)
         if parsed.path == "/api/patch/selection":
             try:
                 if self.patch_manager.is_running():

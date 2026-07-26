@@ -148,6 +148,21 @@ class PortraitPatchManager:
         write_json_atomic(self.exclusion_path, {"packages": excluded})
         return self.summary()
 
+    def clear_package_selection(self):
+        """Exclude every package currently represented by a replacement record."""
+        if self.is_running():
+            raise ValueError("补丁任务运行期间不能修改勾选包")
+        packages = set(self._selected_packages())
+        packages.update(self._excluded_packages())
+        packages.update(
+            str(record.get("package", "")).strip()
+            for record in self.replacement_provider()
+            if str(record.get("package", "")).strip()
+        )
+        write_json_atomic(self.selection_path, {"packages": []})
+        write_json_atomic(self.exclusion_path, {"packages": sorted(packages)})
+        return self.summary()
+
     def _pointer_manifest(self, pointer_path):
         pointer = self._read_json(pointer_path)
         if not pointer:

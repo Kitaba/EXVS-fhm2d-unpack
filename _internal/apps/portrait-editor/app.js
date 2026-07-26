@@ -21,6 +21,7 @@ const els = {
   categoryTabs: document.querySelector("#categoryTabs"),
   searchInput: document.querySelector("#searchInput"),
   modifiedOnly: document.querySelector("#modifiedOnly"),
+  clearPackageSelection: document.querySelector("#clearPackageSelection"),
   resultCount: document.querySelector("#resultCount"),
   gallery: document.querySelector("#gallery"),
   previousPage: document.querySelector("#previousPage"),
@@ -199,6 +200,7 @@ function renderPatchStatus(data) {
   els.deployPatchButton.disabled = data.running || !data.can_deploy;
   els.restoreBackupButton.disabled = data.running || !data.can_restore;
   els.patchLogButton.disabled = !data.log_lines?.length;
+  els.clearPackageSelection.disabled = Boolean(data.running);
   els.uploadButton.disabled = Boolean(data.running);
   const target = targetLayer();
   els.restoreButton.disabled = Boolean(data.running) || !target?.replaced;
@@ -251,6 +253,19 @@ async function setPackageSelection(packageName, selected, modified = false) {
     renderPatchStatus(result);
     await loadGroups();
     showToast(selected ? `已勾选 ${packageName}` : `已取消勾选 ${packageName}`);
+  } catch (error) {
+    showToast(error.message, true);
+  }
+}
+
+async function clearPackageSelection() {
+  if (state.patch?.running) return;
+  try {
+    const result = await api("/api/patch/selection/clear", { method: "POST" });
+    renderPatchStatus(result);
+    await loadGroups();
+    if (state.selectedId) await reloadComposition();
+    showToast("已取消所有勾选；当前替换包已排除");
   } catch (error) {
     showToast(error.message, true);
   }
@@ -712,6 +727,7 @@ els.modifiedOnly.addEventListener("change", () => {
   state.page = 1;
   loadGroups();
 });
+els.clearPackageSelection.addEventListener("click", clearPackageSelection);
 
 els.previousPage.addEventListener("click", () => {
   if (state.page > 1) {
