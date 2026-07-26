@@ -136,13 +136,16 @@ def find_bulk_size_table(index_data, blocks):
 def bulk_table_layout(index_data, table_offset, block_count,
                       expected_start, expected_end):
     end_offset = table_offset + 8 * block_count + 0x20
-    if (
-        struct.unpack_from("<I", index_data, table_offset - 0x0E)[0]
-        == expected_start
-        and struct.unpack_from("<I", index_data, end_offset)[0]
-        == expected_end
-    ):
-        return table_offset - 0x0E, end_offset
+    standard_start_offset = table_offset - 0x0E
+    stored_start = struct.unpack_from(
+        "<I", index_data, standard_start_offset
+    )[0]
+    stored_end = struct.unpack_from("<I", index_data, end_offset)[0]
+    # Older builds could leave either boundary stale while keeping the unique
+    # size table and its opposite boundary valid. Recognize that standard
+    # layout and rewrite both fields during the next build.
+    if stored_start == expected_start or stored_end == expected_end:
+        return standard_start_offset, end_offset
     for start_delta in (0x13, 0x0D):
         shifted_start_offset = table_offset - start_delta
         if (
