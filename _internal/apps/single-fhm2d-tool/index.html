@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>单文件解包压缩工具</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="brand-mark">F2</div>
+    <div>
+      <h1>单文件解包压缩工具</h1>
+      <p>FHM2D → DDS / PNG → FHM2D</p>
+    </div>
+    <span class="local-state"><i></i>仅本机</span>
+  </header>
+
+  <main>
+    <section class="operation-panel">
+      <div class="panel-heading">
+        <span>01</span>
+        <div>
+          <h2>提取一个 FHM2D</h2>
+          <p>建立可编辑的 PNG 工程</p>
+        </div>
+      </div>
+
+      <label for="sourcePath">源文件</label>
+      <div class="field-row">
+        <input id="sourcePath" placeholder="请选择 .fhm2d 文件">
+        <button id="browseSource">浏览</button>
+      </div>
+
+      <label for="projectRoot">工程输出目录</label>
+      <div class="field-row">
+        <input id="projectRoot">
+        <button id="browseProjectRoot">浏览</button>
+      </div>
+
+      <label class="check-row">
+        <input id="extractOverwrite" type="checkbox">
+        <span>覆盖同名工程，包括其中已编辑的 PNG</span>
+      </label>
+      <button id="extractButton" class="primary">提取</button>
+    </section>
+
+    <section class="operation-panel">
+      <div class="panel-heading">
+        <span>02</span>
+        <div>
+          <h2>从文件夹回包</h2>
+          <p>选择包含 project.json 的提取工程</p>
+        </div>
+      </div>
+
+      <label for="projectPath">工程文件夹</label>
+      <div class="field-row">
+        <input id="projectPath" placeholder="请选择本工具生成的工程文件夹">
+        <button id="browseProject">浏览</button>
+      </div>
+
+      <div class="project-state">
+        <strong id="projectName">未读取工程</strong>
+        <span id="projectMeta">-</span>
+        <button id="openPngButton">打开 PNG</button>
+      </div>
+
+      <label for="outputPath">输出 FHM2D</label>
+      <input id="outputPath" placeholder="默认输出到工程的 build 目录">
+
+      <label class="check-row">
+        <input id="buildOverwrite" type="checkbox">
+        <span>覆盖已经生成的输出文件</span>
+      </label>
+      <div class="build-row">
+        <button id="buildButton" class="primary">构建 FHM2D</button>
+        <button id="openBuildButton">打开输出目录</button>
+      </div>
+    </section>
+
+    <section class="task-panel">
+      <div class="task-heading">
+        <div>
+          <span>任务状态</span>
+          <h2 id="taskTitle">等待操作</h2>
+        </div>
+        <button id="cancelButton" disabled>中止</button>
+      </div>
+      <div class="progress"><i id="progressBar"></i></div>
+      <pre id="logOutput">运行日志将在这里显示</pre>
+      <footer>
+        <span id="resultText">请选择要处理的文件</span>
+        <button id="copyLogButton">复制日志</button>
+      </footer>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
