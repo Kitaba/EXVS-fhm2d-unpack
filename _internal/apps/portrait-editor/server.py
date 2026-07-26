@@ -529,8 +529,11 @@ class PortraitHandler(SimpleHTTPRequestHandler):
                 packages = payload.get("packages", [])
                 if not isinstance(packages, list):
                     raise ValueError("packages 必须是数组")
+                excluded_packages = payload.get("excluded_packages", [])
+                if not isinstance(excluded_packages, list):
+                    raise ValueError("excluded_packages 必须是数组")
                 unknown = [
-                    item for item in packages
+                    item for item in packages + excluded_packages
                     if not self.data.has_package(str(item).strip())
                 ]
                 if unknown:
@@ -538,7 +541,9 @@ class PortraitHandler(SimpleHTTPRequestHandler):
                         "存在未识别的包：" + "、".join(map(str, unknown[:8]))
                     )
                 return self.json_response(
-                    self.patch_manager.update_selected_packages(packages)
+                    self.patch_manager.update_selected_packages(
+                        packages, excluded_packages
+                    )
                 )
             except ValueError as exc:
                 return self.error_response(exc)

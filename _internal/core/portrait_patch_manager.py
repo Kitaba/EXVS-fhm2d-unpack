@@ -66,6 +66,7 @@ class PortraitPatchManager:
         self.latest_build_path = self.root / "latest-build.json"
         self.latest_deployment_path = self.root / "latest-deployment.json"
         self.selection_path = self.root / "selected-packages.json"
+        self.exclusion_path = self.root / "excluded-packages.json"
         self.texconv = find_texconv(
             self.core_root / "tools" / "texconv.exe"
         )
@@ -113,7 +114,16 @@ class PortraitPatchManager:
             result.append(name)
         return sorted(result)
 
-    def update_selected_packages(self, packages):
+    def _excluded_packages(self):
+        payload = self._read_json(self.exclusion_path)
+        if not isinstance(payload, dict):
+            return []
+        packages = payload.get("packages", [])
+        if not isinstance(packages, list):
+            return []
+        return sorted({str(item).strip() for item in packages if str(item).strip()})
+
+    def update_selected_packages(self, packages, excluded_packages=None):
         if self.is_running():
             raise ValueError("补丁任务运行期间不能修改勾选包")
         result = []
@@ -128,6 +138,14 @@ class PortraitPatchManager:
             self.selection_path,
             {"packages": sorted(result)},
         )
+        excluded = sorted(
+            {
+                str(item).strip()
+                for item in (excluded_packages or [])
+                if str(item).strip()
+            }
+        )
+        write_json_atomic(self.exclusion_path, {"packages": excluded})
         return self.summary()
 
     def _pointer_manifest(self, pointer_path):
@@ -187,10 +205,13 @@ class PortraitPatchManager:
 
     def collect_plan(self):
         records = self.replacement_provider()
+        excluded_packages = set(self._excluded_packages())
         packages, textures = self._inventory()
         grouped = {}
         for record in records:
             package = record["package"]
+            if package in excluded_packages:
+                continue
             key = (
                 package,
                 record["group"],
@@ -239,7 +260,7 @@ class PortraitPatchManager:
                     "png_file": Path(record["source_png"]).name,
                 }
             )
-        target_packages = set(grouped) | set(self._selected_packages())
+        target_packages = (set(grouped) | set(self._selected_packages())) - excluded_packages
         if not target_packages:
             return []
         result = []
@@ -279,6 +300,25 @@ class PortraitPatchManager:
                     replacement["replacement_sha256"].encode("ascii")
                 )
         return digest.hexdigest()
+
+    def _project_group_aliases(self, package, project_dir):
+        """Map stable database group labels to labels emitted by extraction."""
+        project_rows = read_csv(project_dir / "textures.csv")
+        project_groups = []
+        for row in project_rows:
+            label = row["group_label"]
+            if label not in project_groups:
+                project_groups.append(label)
+        mapping_groups = sorted(
+            {
+                row["group"]
+                for row in read_csv(self.workspace / "asset-mapping" / "groups.csv")
+                if row["package"] == package
+            }
+        )
+        if len(mapping_groups) == len(project_groups):
+            return dict(zip(mapping_groups, project_groups))
+        return {label: label for label in mapping_groups}
 
     def _assert_game_stopped(self):
         if os.name != "nt":
@@ -360,6 +400,7 @@ class PortraitPatchManager:
 
     def summary(self):
         selected_packages = self._selected_packages()
+        excluded_packages = self._excluded_packages()
         try:
             plan = self.collect_plan()
             plan_error = None
@@ -393,6 +434,7 @@ class PortraitPatchManager:
             **state,
             "log_lines": lines,
             "selected_packages": selected_packages,
+            "excluded_packages": excluded_packages,
             "replacement_count": sum(
                 len(item["replacements"]) for item in plan
             ),
@@ -549,8 +591,26 @@ class PortraitPatchManager:
                 self.texconv,
                 force=True,
             )
+            group_aliases = self._project_group_aliases(package, project_dir)
+            project_rows = read_csv(project_dir / "textures.csv")
             for replacement in item["replacements"]:
-                target = project_dir / "png_edit" / replacement["png_file"]
+                project_group = group_aliases.get(
+                    replacement["group"], replacement["group"]
+                )
+                matching_rows = [
+                    row
+                    for row in project_rows
+                    if row["group_label"] == project_group
+                    and int(row["embedded_index"])
+                    == int(replacement["embedded_index"])
+                ]
+                if len(matching_rows) == 1:
+                    png_name = (
+                        Path(matching_rows[0]["dds_output"]).stem + ".png"
+                    )
+                else:
+                    png_name = replacement["png_file"]
+                target = project_dir / "png_edit" / png_name
                 if not target.is_file():
                     raise FileNotFoundError(
                         f"回包工程缺少目标纹理：{target.name}"
@@ -563,7 +623,14 @@ class PortraitPatchManager:
                 for replacement in item["replacements"]
             }
             modified_keys = {
-                f"{package}/{row['group_label']}/"
+                f"{package}/{next(
+                    (
+                        mapping_group
+                        for mapping_group, project_group in group_aliases.items()
+                        if project_group == row["group_label"]
+                    ),
+                    row["group_label"],
+                )}/"
                 f"{row['embedded_index']:05d}"
                 for row in modified
             }

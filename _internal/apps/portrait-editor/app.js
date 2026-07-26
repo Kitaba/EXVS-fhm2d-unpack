@@ -110,6 +110,15 @@ function isExtraSelected(packageName) {
   return selectedPackages().has(packageName);
 }
 
+function excludedPackages() {
+  return new Set(state.patch?.excluded_packages || []);
+}
+
+function isPackageIncluded(packageName, modified = false) {
+  if (excludedPackages().has(packageName)) return false;
+  return modified || isExtraSelected(packageName);
+}
+
 async function loadMeta() {
   state.meta = await api("/api/meta");
   els.mappingMeta.textContent =
@@ -155,7 +164,10 @@ function renderPreviewPackageToggle() {
     els.previewSelectPackage.hidden = true;
     return;
   }
-  const selected = isExtraSelected(state.composition.package);
+  const selected = isPackageIncluded(
+    state.composition.package,
+    allLayers().some((layer) => layer.replaced),
+  );
   els.previewSelectPackage.hidden = false;
   els.previewSelectPackage.disabled = Boolean(state.patch?.running);
   els.previewSelectPackage.classList.toggle("selected", selected);
@@ -218,15 +230,23 @@ async function loadPatchStatus() {
   }
 }
 
-async function setPackageSelection(packageName, selected) {
+async function setPackageSelection(packageName, selected, modified = false) {
   const packages = selectedPackages();
+  const excluded = excludedPackages();
   if (selected) packages.add(packageName);
-  else packages.delete(packageName);
+  else {
+    packages.delete(packageName);
+    excluded.add(packageName);
+  }
+  if (selected) excluded.delete(packageName);
   try {
     const result = await api("/api/patch/selection", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ packages: [...packages].sort() }),
+      body: JSON.stringify({
+        packages: [...packages].sort(),
+        excluded_packages: [...excluded].sort(),
+      }),
     });
     renderPatchStatus(result);
     await loadGroups();
@@ -330,9 +350,10 @@ async function loadGroups() {
       <div class="portrait-card ${item.id === state.selectedId ? "active" : ""}"
         data-id="${escapeHtml(item.id)}" role="button" tabindex="0">
         <button
-          class="package-check ${isExtraSelected(item.package) ? "selected" : ""}"
+          class="package-check ${isPackageIncluded(item.package, item.modified) ? "selected" : ""}"
           type="button"
           data-toggle-package="${escapeHtml(item.package)}"
+          data-modified="${item.modified ? "1" : "0"}"
           title="额外纳入包 ${escapeHtml(item.package)} 到补丁构建">
           ✓
         </button>
@@ -663,6 +684,7 @@ els.gallery.addEventListener("click", (event) => {
     setPackageSelection(
       toggle.dataset.togglePackage,
       !toggle.classList.contains("selected"),
+      toggle.dataset.modified === "1",
     );
     return;
   }
@@ -747,7 +769,11 @@ els.previewSelectPackage.addEventListener("click", () => {
   if (!state.composition) return;
   setPackageSelection(
     state.composition.package,
-    !isExtraSelected(state.composition.package),
+    !isPackageIncluded(
+      state.composition.package,
+      allLayers().some((layer) => layer.replaced),
+    ),
+    allLayers().some((layer) => layer.replaced),
   );
 });
 els.uploadButton.addEventListener("click", () => els.fileInput.click());
