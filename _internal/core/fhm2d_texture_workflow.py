@@ -14,7 +14,12 @@ from pathlib import Path
 from png_color_profile import retag_png_srgb
 
 from fhm2d_dds_match import parse_dds
-from fhm2d_extract_textures import extract_file
+from fhm2d_extract_textures import (
+    FHM2D_BC7_FORMAT,
+    FHM2D_RGBA8_FORMAT,
+    TEXTURE_FORMATS,
+    extract_file,
+)
 from fhm2d_repack import decode_container, repack_file
 
 
@@ -159,7 +164,11 @@ def export_project(input_path, output_root, texconv, force=False):
     if force:
         clear_directory(project_dir, output_root)
 
-    extract_report, project_dir = extract_file(input_path, output_root)
+    extract_report, project_dir = extract_file(
+        input_path,
+        output_root,
+        supported_formats=set(TEXTURE_FORMATS),
+    )
     texture_rows = read_csv(project_dir / "textures.csv")
     dds_paths = [project_dir / row["dds_output"] for row in texture_rows]
     png_dir = project_dir / "png_edit"
@@ -278,6 +287,7 @@ def project_status(project_dir):
                 "texture_index": int(texture["texture_index"]),
                 "group_label": texture["group_label"],
                 "embedded_index": int(texture["embedded_index"]),
+                "fhm2d_format": int(texture["fhm2d_format"]),
                 "png_file": manifest["png_file"],
                 "width": int(texture["width"]),
                 "height": int(texture["height"]),
@@ -295,19 +305,32 @@ def convert_changed_pngs(texconv, project_dir, changed_rows, dds_dir):
 
     def encode(row):
         png_path = png_dir / row["png_file"]
+        texture_format = int(row["fhm2d_format"])
+        if texture_format == FHM2D_BC7_FORMAT:
+            texconv_format = "BC7_UNORM"
+            expected_dxgi = 98
+            compression_args = ["-bc", "x"]
+        elif texture_format == FHM2D_RGBA8_FORMAT:
+            texconv_format = "R8G8B8A8_UNORM"
+            expected_dxgi = 28
+            compression_args = []
+        else:
+            raise ValueError(
+                f"unsupported editable texture format 0x{texture_format:X} "
+                f"for {row['png_file']}"
+            )
         run_texconv(
             texconv,
             [
                 "-y",
                 "-f",
-                "BC7_UNORM",
+                texconv_format,
                 "-m",
                 "1",
                 "-dx10",
                 "-nogpu",
                 "--single-proc",
-                "-bc",
-                "x",
+                *compression_args,
                 "--ignore-srgb",
                 "-o",
                 dds_dir,
@@ -326,9 +349,10 @@ def convert_changed_pngs(texconv, project_dir, changed_rows, dds_dir):
             raise ValueError(
                 f"encoded DDS subresources are invalid for {row['png_file']}"
             )
-        if dds["dxgi_format"] != 98:
+        if dds["dxgi_format"] != expected_dxgi:
             raise ValueError(
-                f"encoded DDS format {dds['dxgi_format']} is not BC7_UNORM"
+                f"encoded DDS format {dds['dxgi_format']} does not match "
+                f"expected DXGI {expected_dxgi}"
             )
         return str(row["texture_index"]), {"path": dds_path, "dds": dds}
 

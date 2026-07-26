@@ -120,6 +120,8 @@ TEXTURE_FORMATS = {
     },
 }
 
+PAYLOAD_PADDING_TOLERANCE = 0x100
+
 
 def decode_payload(input_path, strict=True):
     blob = input_path.read_bytes()
@@ -131,19 +133,38 @@ def decode_payload(input_path, strict=True):
         if index is None:
             trailing_offset = file_offset
             break
-        decoded.append((index, data))
+        decoded.append((index, file_offset, compressed_size, data))
 
     if len(decoded) < 2:
         raise ValueError("fhm2d contains no payload blocks")
 
-    index_data = decoded[0][1]
-    payload = b"".join(data for _, data in decoded[1:])
+    index_data = decoded[0][3]
     declared_size = u32(index_data, 0x34) | (u32(index_data, 0x38) << 32)
-    if strict and declared_size != len(payload):
+    payload_parts = []
+    payload_size = 0
+    payload_end = None
+    for position, (_, file_offset, _, data) in enumerate(decoded[1:], 1):
+        if payload_size + len(data) > declared_size:
+            break
+        payload_parts.append(data)
+        payload_size += len(data)
+        if payload_size == declared_size:
+            next_block = decoded[position + 1] if position + 1 < len(decoded) else None
+            payload_end = next_block[1] if next_block else len(blob)
+            break
+    payload = b"".join(payload_parts)
+    tolerated_padding = (
+        declared_size > payload_size
+        and declared_size - payload_size <= PAYLOAD_PADDING_TOLERANCE
+        and payload_end is None
+    )
+    if strict and declared_size != payload_size and not tolerated_padding:
         raise ValueError(
-            f"payload size mismatch: index={declared_size}, decoded={len(payload)}"
+            f"payload size mismatch: index={declared_size}, decoded={payload_size}"
         )
 
+    if payload_end is not None:
+        trailing_offset = payload_end
     trailing = blob[trailing_offset:] if trailing_offset is not None else b""
     return blob, header, payload, trailing
 

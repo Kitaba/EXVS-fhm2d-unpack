@@ -124,6 +124,9 @@ class PortraitData:
                 result.add(key)
         return result
 
+    def has_package(self, package):
+        return any(row["package"] == package for row in self.groups)
+
     def replacement_records(self):
         self.scan_replacements()
         records = []
@@ -355,26 +358,58 @@ class PortraitData:
             with Image.open(temp_path) as image:
                 image.load()
                 expected = (int(layer["width"]), int(layer["height"]))
-                if image.format != "PNG":
-                    raise ValueError("只接受 PNG 文件")
-                if image.mode != "RGBA":
-                    raise ValueError(
-                        f"图片模式为 {image.mode}，要求 RGBA"
+                source_format = image.format or "UNKNOWN"
+                source_size = image.size
+                source_mode = image.mode
+                alpha_added = "A" not in image.getbands()
+                prepared = image.convert("RGBA")
+                if prepared.size != expected:
+                    scale = min(
+                        expected[0] / prepared.width,
+                        expected[1] / prepared.height,
                     )
-                if image.size != expected:
-                    raise ValueError(
-                        f"图片尺寸为 {image.size[0]}x{image.size[1]}，"
-                        f"要求 {expected[0]}x{expected[1]}"
+                    resized_size = (
+                        max(1, round(prepared.width * scale)),
+                        max(1, round(prepared.height * scale)),
                     )
+                    prepared = prepared.resize(
+                        resized_size, Image.Resampling.LANCZOS
+                    )
+                    canvas = Image.new("RGBA", expected, (0, 0, 0, 0))
+                    canvas.paste(
+                        prepared,
+                        (
+                            (expected[0] - resized_size[0]) // 2,
+                            (expected[1] - resized_size[1]) // 2,
+                        ),
+                    )
+                    prepared = canvas
+                temporary_png = temp_path.with_suffix(".normalized.png")
+                prepared.save(temporary_png, "PNG", optimize=False)
+                prepared.close()
+            os.replace(temporary_png, temp_path)
             os.replace(temp_path, destination)
             self.replacement_keys.add(
                 self.normalized_relative(layer["replacement_path"])
             )
             self.invalidate_preview(key)
-            return self.layer_payload(layer)
+            result = self.layer_payload(layer)
+            result.update(
+                {
+                    "source_format": source_format,
+                    "source_mode": source_mode,
+                    "source_size": list(source_size),
+                    "normalized_size": list(expected),
+                    "resized": list(source_size) != list(expected),
+                    "alpha_added": alpha_added,
+                }
+            )
+            return result
         finally:
             if temp_path and temp_path.exists():
                 temp_path.unlink()
+            if "temporary_png" in locals() and temporary_png.exists():
+                temporary_png.unlink()
 
     def delete_replacement(self, texture_id):
         if texture_id not in self.layer_index:
@@ -479,6 +514,34 @@ class PortraitHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/patch/selection":
+            try:
+                if self.patch_manager.is_running():
+                    return self.error_response(
+                        "补丁任务运行期间不能修改勾选包",
+                        HTTPStatus.CONFLICT,
+                    )
+                length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(
+                    self.rfile.read(length).decode("utf-8")
+                    if length > 0 else "{}"
+                )
+                packages = payload.get("packages", [])
+                if not isinstance(packages, list):
+                    raise ValueError("packages 必须是数组")
+                unknown = [
+                    item for item in packages
+                    if not self.data.has_package(str(item).strip())
+                ]
+                if unknown:
+                    raise ValueError(
+                        "存在未识别的包：" + "、".join(map(str, unknown[:8]))
+                    )
+                return self.json_response(
+                    self.patch_manager.update_selected_packages(packages)
+                )
+            except ValueError as exc:
+                return self.error_response(exc)
         if parsed.path.startswith("/api/patch/"):
             action = parsed.path.rsplit("/", 1)[-1]
             try:
@@ -498,8 +561,18 @@ class PortraitHandler(SimpleHTTPRequestHandler):
         query = parse_qs(parsed.query)
         texture_id = self.single(query, "texture_id")
         content_type = self.headers.get("Content-Type", "").split(";")[0]
-        if content_type != "image/png":
-            return self.error_response("Content-Type 必须为 image/png")
+        allowed_content_types = {
+            "image/png",
+            "image/jpeg",
+            "image/webp",
+            "image/bmp",
+            "image/vnd-ms.dds",
+            "application/octet-stream",
+        }
+        if content_type not in allowed_content_types:
+            return self.error_response(
+                "只支持 PNG、JPEG、WEBP、BMP 或 DDS 图片"
+            )
         if self.patch_manager.is_running():
             return self.error_response(
                 "补丁任务运行期间不能修改替换图",

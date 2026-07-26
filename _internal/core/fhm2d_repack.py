@@ -11,6 +11,7 @@ from fhm2d_unpack import iter_deflate_blocks, read_header
 
 
 HEADER_SIZE = 0x30
+PAYLOAD_PADDING_TOLERANCE = 0x100
 
 
 def compress_raw(data):
@@ -45,13 +46,31 @@ def decode_container(input_path):
         raise ValueError("fhm2d contains no payload blocks")
 
     index_block = blocks[0]
-    payload_blocks = blocks[1:]
-    payload = b"".join(block["data"] for block in payload_blocks)
     declared_payload_size = struct.unpack_from("<Q", index_block["data"], 0x34)[0]
-    if declared_payload_size != len(payload):
+    payload_blocks = []
+    payload_size = 0
+    trailing_offset = len(blob)
+    for position, block in enumerate(blocks[1:], 1):
+        if payload_size + block["uncompressed_size"] > declared_payload_size:
+            break
+        payload_blocks.append(block)
+        payload_size += block["uncompressed_size"]
+        if payload_size == declared_payload_size:
+            trailing_offset = (
+                blocks[position + 1]["file_offset"]
+                if position + 1 < len(blocks)
+                else len(blob)
+            )
+            break
+    tolerated_padding = (
+        declared_payload_size > payload_size
+        and declared_payload_size - payload_size <= PAYLOAD_PADDING_TOLERANCE
+        and trailing_offset == len(blob)
+    )
+    if declared_payload_size != payload_size and not tolerated_padding:
         raise ValueError(
             f"payload size mismatch: index={declared_payload_size}, "
-            f"decoded={len(payload)}"
+            f"decoded={payload_size}"
         )
 
     data_base = payload_blocks[0]["file_offset"]
@@ -60,6 +79,7 @@ def decode_container(input_path):
             index_block["data"], block, data_base
         )
 
+    payload = b"".join(block["data"] for block in payload_blocks)
     return {
         "blob": blob,
         "header": header,
@@ -111,6 +131,32 @@ def find_bulk_size_table(index_data, blocks):
             f"{blocks[0]['index']}..{blocks[-1]['index']}, found {matches}"
         )
     return matches[0]
+
+
+def bulk_table_layout(index_data, table_offset, block_count,
+                      expected_start, expected_end):
+    end_offset = table_offset + 8 * block_count + 0x20
+    if (
+        struct.unpack_from("<I", index_data, table_offset - 0x0E)[0]
+        == expected_start
+        and struct.unpack_from("<I", index_data, end_offset)[0]
+        == expected_end
+    ):
+        return table_offset - 0x0E, end_offset
+    for start_delta in (0x13, 0x0D):
+        shifted_start_offset = table_offset - start_delta
+        if (
+            struct.unpack_from("<I", index_data, shifted_start_offset)[0]
+            == expected_start
+        ):
+            shifted_end = (
+                end_offset
+                if struct.unpack_from("<I", index_data, end_offset)[0]
+                == expected_end
+                else None
+            )
+            return shifted_start_offset, shifted_end
+    raise ValueError("bulk table offset fields are not recognized")
 
 
 def find_trailing_offset_references(index_data, compressed_size, trailing_size):
@@ -194,13 +240,27 @@ def rebuild_container(container, payload):
         table_offset = find_bulk_size_table(
             container["index_data"], bulk_blocks
         )
+        original_data_base = container["payload_blocks"][0]["file_offset"]
+        original_start = (
+            bulk_blocks[0]["file_offset"] - original_data_base
+        )
+        original_end = (
+            bulk_blocks[-1]["file_offset"]
+            + bulk_blocks[-1]["compressed_size"]
+            - original_data_base
+        )
+        start_offset, end_offset = bulk_table_layout(
+            container["index_data"], table_offset,
+            len(bulk_blocks),
+            original_start, original_end,
+        )
         first_update = updates_by_index[first]
         relative_start = first_update["relative_compressed_offset"]
         relative_end = relative_start + sum(
             updates_by_index[index]["compressed_size"]
             for index in range(first, last + 1)
         )
-        struct.pack_into("<I", index_data, table_offset - 0x0E, relative_start)
+        struct.pack_into("<I", index_data, start_offset, relative_start)
         for table_index, block_index in enumerate(range(first, last + 1)):
             compressed_size = updates_by_index[block_index]["compressed_size"]
             if compressed_size > 0xFFFF:
@@ -213,7 +273,8 @@ def rebuild_container(container, payload):
                 table_offset + 8 * table_index,
                 compressed_size,
             )
-        struct.pack_into("<I", index_data, table_offset + 0x88, relative_end)
+        if end_offset is not None:
+            struct.pack_into("<I", index_data, end_offset, relative_end)
 
     original_compressed_size = sum(
         block["compressed_size"] for block in container["payload_blocks"]
@@ -258,13 +319,11 @@ def rebuild_container(container, payload):
 
 
 def verify_rebuilt(original_container, rebuilt, expected_payload):
-    rebuilt_blocks = []
-    trailing_offset = len(rebuilt)
+    all_rebuilt_blocks = []
     for index, file_offset, compressed_size, data in iter_deflate_blocks(rebuilt):
         if index is None:
-            trailing_offset = file_offset
             break
-        rebuilt_blocks.append(
+        all_rebuilt_blocks.append(
             {
                 "index": index,
                 "file_offset": file_offset,
@@ -274,8 +333,15 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
             }
         )
 
-    if len(rebuilt_blocks) != len(original_container["payload_blocks"]) + 1:
+    expected_block_count = len(original_container["payload_blocks"]) + 1
+    if len(all_rebuilt_blocks) < expected_block_count:
         raise ValueError("rebuilt block count differs from original")
+    rebuilt_blocks = all_rebuilt_blocks[:expected_block_count]
+    trailing_offset = (
+        all_rebuilt_blocks[expected_block_count]["file_offset"]
+        if len(all_rebuilt_blocks) > expected_block_count
+        else len(rebuilt)
+    )
     rebuilt_payload_blocks = rebuilt_blocks[1:]
     rebuilt_payload = b"".join(block["data"] for block in rebuilt_payload_blocks)
     if rebuilt_payload != expected_payload:
@@ -295,14 +361,25 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
             raise ValueError(
                 f"rebuilt block {rebuilt_block['index']} size differs from original"
             )
-        catalog_offsets = find_catalog_record(
-            index_data, rebuilt_block, data_base
-        )
-        if len(catalog_offsets) != len(original["catalog_offsets"]):
-            raise ValueError(
-                f"rebuilt block {rebuilt_block['index']} catalog references "
-                f"differ from original"
+        for record_offset in original["catalog_offsets"]:
+            relative_offset = struct.unpack_from(
+                "<I", index_data, record_offset + 0x09
+            )[0]
+            compressed_size = int.from_bytes(
+                index_data[record_offset + 0x16 : record_offset + 0x19],
+                "little",
             )
+            expected_offset = rebuilt_block["file_offset"] - data_base
+            if relative_offset != expected_offset:
+                raise ValueError(
+                    f"rebuilt block {rebuilt_block['index']} catalog offset "
+                    "is incorrect"
+                )
+            if compressed_size != rebuilt_block["compressed_size"]:
+                raise ValueError(
+                    f"rebuilt block {rebuilt_block['index']} catalog size "
+                    "is incorrect"
+                )
 
     original_without_catalog = [
         block["index"]
@@ -322,6 +399,18 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
         table_offset = find_bulk_size_table(
             original_container["index_data"], original_bulk
         )
+        original_data_base = original_container["payload_blocks"][0]["file_offset"]
+        original_start = original_bulk[0]["file_offset"] - original_data_base
+        original_end = (
+            original_bulk[-1]["file_offset"]
+            + original_bulk[-1]["compressed_size"]
+            - original_data_base
+        )
+        start_offset, end_offset = bulk_table_layout(
+            original_container["index_data"], table_offset,
+            len(original_bulk),
+            original_start, original_end,
+        )
         relative_start = (
             rebuilt_by_index[first]["file_offset"] - data_base
         )
@@ -330,7 +419,7 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
             - data_base
             + rebuilt_by_index[last]["compressed_size"]
         )
-        if struct.unpack_from("<I", index_data, table_offset - 0x0E)[0] != relative_start:
+        if struct.unpack_from("<I", index_data, start_offset)[0] != relative_start:
             raise ValueError(f"bulk run {first}..{last} start offset is incorrect")
         for table_index, block_index in enumerate(range(first, last + 1)):
             encoded_size = struct.unpack_from(
@@ -340,7 +429,9 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
                 raise ValueError(
                     f"bulk block {block_index} compressed size is incorrect"
                 )
-        if struct.unpack_from("<I", index_data, table_offset + 0x88)[0] != relative_end:
+        if end_offset is not None and struct.unpack_from(
+            "<I", index_data, end_offset
+        )[0] != relative_end:
             raise ValueError(f"bulk run {first}..{last} end offset is incorrect")
 
     original_compressed_size = sum(
@@ -366,6 +457,20 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
 def repack_file(input_path, output_path, payload=None):
     container = decode_container(input_path)
     replacement_payload = container["payload"] if payload is None else payload
+    if replacement_payload == container["payload"]:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(container["blob"])
+        digest = hashlib.sha256(container["blob"]).hexdigest()
+        return {
+            "source": str(input_path),
+            "output": str(output_path),
+            "source_size": len(container["blob"]),
+            "output_size": len(container["blob"]),
+            "source_sha256": digest,
+            "output_sha256": digest,
+            "payload_sha256": hashlib.sha256(replacement_payload).hexdigest(),
+            "byte_identical": True,
+        }
     rebuilt = rebuild_container(container, replacement_payload)
     verify_rebuilt(container, rebuilt, replacement_payload)
     output_path.parent.mkdir(parents=True, exist_ok=True)

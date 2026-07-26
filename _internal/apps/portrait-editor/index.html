@@ -29,6 +29,20 @@
     <div class="deployment-state">
       <span id="patchMessage">等待操作</span>
       <span id="patchPackages"></span>
+      <details class="payload-guidance">
+        <summary>回包检查</summary>
+        <div class="payload-guidance-popover">
+          <strong>出现 payload size mismatch 时，请检查：</strong>
+          <ul>
+            <li>PNG 尺寸必须保持原值：872×960、260×180 或 572×572。</li>
+            <li>DDS 格式必须与原图一致，原图为 BC7_UNORM 时不要改成 BC3 或 RGBA8。</li>
+            <li>mipmap 数量、数组层数和切片数量必须保持一致。</li>
+            <li>必须保留透明通道；不要用会丢失 Alpha 的图片工具重新保存。</li>
+            <li>不要改变纹理布局、切片结构或数组结构。</li>
+          </ul>
+          <span>这是封装数据长度校验失败，不是普通的颜色偏差。</span>
+        </div>
+      </details>
     </div>
     <div class="deployment-actions">
       <button id="patchLogButton" class="icon-button" title="查看补丁日志">≡</button>
@@ -90,6 +104,14 @@
       </div>
 
       <div id="canvasViewport" class="canvas-viewport">
+        <button
+          id="previewSelectPackage"
+          class="preview-package-toggle"
+          type="button"
+          hidden
+          title="额外纳入当前包到补丁构建">
+          纳入打包
+        </button>
         <div id="emptyState" class="empty-state">
           <div class="empty-symbol">▧</div>
           <strong>从左侧选择一组立绘</strong>
@@ -121,13 +143,13 @@
         <section class="target-section">
           <div class="section-label">当前替换目标</div>
           <div id="targetCard" class="target-card"></div>
-          <input id="fileInput" type="file" accept="image/png" hidden>
+          <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/bmp,image/vnd-ms.dds,.dds" hidden>
           <div class="target-actions">
-            <button id="uploadButton" class="primary-button">选择 PNG</button>
+            <button id="uploadButton" class="primary-button">导入图片</button>
             <button id="restoreButton" class="secondary-button" disabled>恢复原图</button>
           </div>
           <div id="dropZone" class="drop-zone" tabindex="0">
-            将 PNG 拖到这里替换当前目标
+            将 PNG、JPEG、WEBP、BMP 或 DDS 拖到这里替换当前目标
           </div>
           <p id="uploadRule" class="upload-rule"></p>
         </section>

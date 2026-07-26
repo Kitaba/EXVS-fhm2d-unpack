@@ -39,6 +39,7 @@ const els = {
   fitButton: document.querySelector("#fitButton"),
   zoomLabel: document.querySelector("#zoomLabel"),
   downloadButton: document.querySelector("#downloadButton"),
+  previewSelectPackage: document.querySelector("#previewSelectPackage"),
   modifiedBadge: document.querySelector("#modifiedBadge"),
   inspectorEmpty: document.querySelector("#inspectorEmpty"),
   inspectorContent: document.querySelector("#inspectorContent"),
@@ -96,10 +97,17 @@ function showToast(message, error = false) {
   els.toast.classList.toggle("error", error);
   els.toast.classList.add("visible");
   window.clearTimeout(showToast.timer);
-  showToast.timer = window.setTimeout(
-    () => els.toast.classList.remove("visible"),
-    2800,
-  );
+  showToast.timer = window.setTimeout(() => {
+    els.toast.classList.remove("visible");
+  }, 2800);
+}
+
+function selectedPackages() {
+  return new Set(state.patch?.selected_packages || []);
+}
+
+function isExtraSelected(packageName) {
+  return selectedPackages().has(packageName);
 }
 
 async function loadMeta() {
@@ -113,40 +121,80 @@ async function loadMeta() {
   renderCategoryTabs();
 }
 
+function patchSummaryText(data) {
+  if (data.plan_error) return "补丁准备失败";
+  const manualCount = data.selected_packages?.length || 0;
+  let text =
+    `${data.replacement_count || 0} 张替换图 · ` +
+    `${data.affected_package_count || 0} 个 FHM2D 包`;
+  if (manualCount) text += ` · 额外勾选 ${manualCount} 个包`;
+  return text;
+}
+
+function patchPackagesText(data) {
+  const manual = data.selected_packages || [];
+  if (manual.length) {
+    return `默认自动包含已修改包；额外勾选：${manual.join("、")}`;
+  }
+  if (data.affected_packages?.length) {
+    return "默认自动包含已修改包；当前没有额外勾选包";
+  }
+  return "没有待构建包";
+}
+
+function friendlyPatchError(error) {
+  const message = String(error || "");
+  if (/payload\s*size\s*mismatch/i.test(message)) {
+    return "回包失败：payload size mismatch。请展开顶部“回包检查”，确认图片尺寸、DDS/BC7 格式、mipmap、Alpha 和切片结构均未改变。";
+  }
+  return message;
+}
+
+function renderPreviewPackageToggle() {
+  if (!state.composition) {
+    els.previewSelectPackage.hidden = true;
+    return;
+  }
+  const selected = isExtraSelected(state.composition.package);
+  els.previewSelectPackage.hidden = false;
+  els.previewSelectPackage.disabled = Boolean(state.patch?.running);
+  els.previewSelectPackage.classList.toggle("selected", selected);
+  els.previewSelectPackage.textContent = selected ? "已纳入打包" : "纳入打包";
+  els.previewSelectPackage.title = selected
+    ? `取消额外纳入 ${state.composition.package}`
+    : `额外纳入 ${state.composition.package} 到补丁构建`;
+}
+
 function renderPatchStatus(data) {
   const previous = state.patch;
   state.patch = data;
-  const count = data.replacement_count || 0;
-  const packageCount = data.affected_package_count || 0;
-  els.patchSummary.textContent = data.plan_error
-    ? "补丁准备失败"
-    : `${count} 张替换图 · ${packageCount} 个 FHM2D 包`;
+  els.patchSummary.textContent = patchSummaryText(data);
   els.patchMessage.textContent = data.running
     ? `${data.label}：${data.message}`
-    : ["deploying", "rollback_failed"].includes(
-        data.latest_deployment?.status,
-      )
-      ? `检测到中断部署 · 请恢复 ${data.latest_deployment.package_count} 个包`
-      : data.latest_deployment?.status === "deployed"
-        ? `补丁已部署 · ${data.latest_deployment.package_count} 个包`
-      : data.latest_build?.current
-        ? `补丁已构建 · ${data.latest_build.package_count} 个包`
-        : data.plan_error || data.message || "等待操作";
-  els.patchPackages.textContent = data.affected_packages?.length
-    ? data.affected_packages.join("、")
-    : "没有待构建包";
+    : data.error
+      ? friendlyPatchError(data.error)
+      : ["deploying", "rollback_failed"].includes(
+          data.latest_deployment?.status,
+        )
+        ? `检测到中断部署 · 请恢复 ${data.latest_deployment.package_count} 个包`
+        : data.latest_deployment?.status === "deployed"
+          ? `补丁已部署 · ${data.latest_deployment.package_count} 个包`
+          : data.latest_build?.current
+            ? `补丁已构建 · ${data.latest_build.package_count} 个包`
+            : data.plan_error || data.message || "等待操作";
+  els.patchPackages.textContent = patchPackagesText(data);
   els.buildPatchButton.disabled = data.running || !data.can_build;
   els.deployPatchButton.disabled = data.running || !data.can_deploy;
   els.restoreBackupButton.disabled = data.running || !data.can_restore;
   els.patchLogButton.disabled = !data.log_lines?.length;
   els.uploadButton.disabled = Boolean(data.running);
   const target = targetLayer();
-  els.restoreButton.disabled =
-    Boolean(data.running) || !target?.replaced;
+  els.restoreButton.disabled = Boolean(data.running) || !target?.replaced;
+  renderPreviewPackageToggle();
 
   if (previous?.running && !data.running) {
     showToast(
-      data.error ? data.error : `${previous.label}完成`,
+      data.error ? friendlyPatchError(data.error) : `${previous.label}完成`,
       Boolean(data.error),
     );
     loadMeta();
@@ -167,6 +215,24 @@ async function loadPatchStatus() {
       loadPatchStatus,
       state.patch?.running ? 800 : 2500,
     );
+  }
+}
+
+async function setPackageSelection(packageName, selected) {
+  const packages = selectedPackages();
+  if (selected) packages.add(packageName);
+  else packages.delete(packageName);
+  try {
+    const result = await api("/api/patch/selection", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packages: [...packages].sort() }),
+    });
+    renderPatchStatus(result);
+    await loadGroups();
+    showToast(selected ? `已勾选 ${packageName}` : `已取消勾选 ${packageName}`);
+  } catch (error) {
+    showToast(error.message, true);
   }
 }
 
@@ -192,14 +258,14 @@ function openPatchConfirmation(action) {
   if (action === "deploy") {
     els.patchDialogTitle.textContent = "备份并部署补丁";
     els.patchDialogMessage.textContent =
-      `将关闭状态下的游戏资源替换为最新构建，并先建立可恢复备份。\n` +
+      `将把最新构建写入游戏目录，并先备份原始文件。\n` +
       `涉及 ${packageCount} 个包：${packages}`;
     els.patchDialogConfirm.textContent = "备份并部署";
   } else {
     const deployed = state.patch?.latest_deployment;
     els.patchDialogTitle.textContent = "恢复最近备份";
     els.patchDialogMessage.textContent =
-      `将恢复部署批次 ${deployed?.id || "-"} 中的原始游戏文件。\n` +
+      `将恢复部署批次 ${deployed?.id || "-"} 的原始游戏文件。\n` +
       `涉及 ${deployed?.package_count || 0} 个包。`;
     els.patchDialogConfirm.textContent = "恢复备份";
   }
@@ -261,8 +327,15 @@ async function loadGroups() {
       return;
     }
     els.gallery.innerHTML = data.items.map((item) => `
-      <button class="portrait-card ${item.id === state.selectedId ? "active" : ""}"
-        data-id="${escapeHtml(item.id)}">
+      <div class="portrait-card ${item.id === state.selectedId ? "active" : ""}"
+        data-id="${escapeHtml(item.id)}" role="button" tabindex="0">
+        <button
+          class="package-check ${isExtraSelected(item.package) ? "selected" : ""}"
+          type="button"
+          data-toggle-package="${escapeHtml(item.package)}"
+          title="额外纳入包 ${escapeHtml(item.package)} 到补丁构建">
+          ✓
+        </button>
         <img class="portrait-thumb" src="${escapeHtml(item.preview_url)}"
           alt="" loading="lazy">
         ${item.modified ? '<span class="card-modified">已修改</span>' : ""}
@@ -270,7 +343,7 @@ async function loadGroups() {
           <span class="portrait-name">${escapeHtml(item.package)} / ${escapeHtml(item.group)}</span>
           <span class="portrait-meta">${item.canvas[0]}×${item.canvas[1]} · ${item.state_count} 状态</span>
         </span>
-      </button>
+      </div>
     `).join("");
   } catch (error) {
     if (error.name !== "AbortError") {
@@ -311,6 +384,7 @@ async function selectComposition(identifier) {
     els.inspectorContent.hidden = false;
     renderInspector();
     updateModifiedBadge();
+    renderPreviewPackageToggle();
     await renderCanvas();
     loadGroups();
   } catch (error) {
@@ -395,9 +469,8 @@ function renderTarget() {
     </div>
   `;
   els.uploadRule.textContent =
-    `要求：RGBA PNG，${target.width}×${target.height}，不自动缩放`;
-  els.restoreButton.disabled =
-    Boolean(state.patch?.running) || !target.replaced;
+    `支持 PNG/JPEG/WEBP/BMP/DDS；将自动转为 RGBA PNG、缩放到 ${target.width}×${target.height}，并按原纹理规格回包`;
+  els.restoreButton.disabled = Boolean(state.patch?.running) || !target.replaced;
 }
 
 function updateModifiedBadge() {
@@ -486,17 +559,20 @@ function applyZoom() {
 async function uploadReplacement(file) {
   const target = targetLayer();
   if (!target) return;
-  if (file.type !== "image/png") {
-    showToast("只接受 PNG 文件", true);
+  const allowed = /\.(png|jpe?g|webp|bmp|dds)$/i.test(file.name);
+  if (!allowed) {
+    showToast("只支持 PNG、JPEG、WEBP、BMP 或 DDS 图片", true);
     return;
   }
   els.uploadButton.disabled = true;
   try {
-    await api(
+    const result = await api(
       `/api/replacement?texture_id=${encodeURIComponent(target.texture_id)}`,
       {
         method: "POST",
-        headers: { "Content-Type": "image/png" },
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
         body: file,
       },
     );
@@ -504,7 +580,13 @@ async function uploadReplacement(file) {
     await loadMeta();
     await loadGroups();
     await loadPatchStatus();
-    showToast(`已替换 ${roleLabels[target.role] || target.role}`);
+    const normalized = result.resized
+      ? `，已缩放至 ${result.normalized_size.join("×")}（透明补边）`
+      : "";
+    const alpha = result.alpha_added ? "，已补充不透明 Alpha" : "";
+    showToast(
+      `已导入 ${result.source_format || "图片"} 并替换${normalized}${alpha}`,
+    );
   } catch (error) {
     showToast(error.message, true);
   } finally {
@@ -541,6 +623,7 @@ async function reloadComposition() {
   state.targetTextureId = targetId;
   renderInspector();
   updateModifiedBadge();
+  renderPreviewPackageToggle();
   await renderCanvas();
 }
 
@@ -573,6 +656,16 @@ els.categoryTabs.addEventListener("click", (event) => {
 });
 
 els.gallery.addEventListener("click", (event) => {
+  const toggle = event.target.closest("[data-toggle-package]");
+  if (toggle) {
+    event.preventDefault();
+    event.stopPropagation();
+    setPackageSelection(
+      toggle.dataset.togglePackage,
+      !toggle.classList.contains("selected"),
+    );
+    return;
+  }
   const card = event.target.closest("[data-id]");
   if (card) selectComposition(card.dataset.id);
 });
@@ -627,9 +720,9 @@ els.refreshButton.addEventListener("click", async () => {
 document.querySelectorAll(".mode-button").forEach((button) => {
   button.addEventListener("click", () => {
     state.previewMode = button.dataset.mode;
-    document.querySelectorAll(".mode-button").forEach((item) =>
-      item.classList.toggle("active", item === button)
-    );
+    document.querySelectorAll(".mode-button").forEach((item) => {
+      item.classList.toggle("active", item === button);
+    });
     renderCanvas();
   });
 });
@@ -650,20 +743,21 @@ els.fitButton.addEventListener("click", () => {
 });
 
 els.downloadButton.addEventListener("click", downloadPreview);
+els.previewSelectPackage.addEventListener("click", () => {
+  if (!state.composition) return;
+  setPackageSelection(
+    state.composition.package,
+    !isExtraSelected(state.composition.package),
+  );
+});
 els.uploadButton.addEventListener("click", () => els.fileInput.click());
 els.fileInput.addEventListener("change", () => {
   if (els.fileInput.files[0]) uploadReplacement(els.fileInput.files[0]);
 });
 els.restoreButton.addEventListener("click", restoreTarget);
-els.buildPatchButton.addEventListener(
-  "click", () => startPatchAction("build"),
-);
-els.deployPatchButton.addEventListener(
-  "click", () => openPatchConfirmation("deploy"),
-);
-els.restoreBackupButton.addEventListener(
-  "click", () => openPatchConfirmation("restore"),
-);
+els.buildPatchButton.addEventListener("click", () => startPatchAction("build"));
+els.deployPatchButton.addEventListener("click", () => openPatchConfirmation("deploy"));
+els.restoreBackupButton.addEventListener("click", () => openPatchConfirmation("restore"));
 els.patchLogButton.addEventListener("click", openPatchLog);
 els.patchDialog.addEventListener("close", () => {
   const action = els.patchDialog.dataset.action;

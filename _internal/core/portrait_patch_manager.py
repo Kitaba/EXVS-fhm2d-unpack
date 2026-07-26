@@ -65,6 +65,7 @@ class PortraitPatchManager:
         self.manifests_root = self.root / "manifests"
         self.latest_build_path = self.root / "latest-build.json"
         self.latest_deployment_path = self.root / "latest-deployment.json"
+        self.selection_path = self.root / "selected-packages.json"
         self.texconv = find_texconv(
             self.core_root / "tools" / "texconv.exe"
         )
@@ -94,6 +95,40 @@ class PortraitPatchManager:
             return json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             return None
+
+    def _selected_packages(self):
+        payload = self._read_json(self.selection_path)
+        if not isinstance(payload, dict):
+            return []
+        packages = payload.get("packages", [])
+        if not isinstance(packages, list):
+            return []
+        result = []
+        seen = set()
+        for item in packages:
+            name = str(item).strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            result.append(name)
+        return sorted(result)
+
+    def update_selected_packages(self, packages):
+        if self.is_running():
+            raise ValueError("补丁任务运行期间不能修改勾选包")
+        result = []
+        seen = set()
+        for item in packages:
+            name = str(item).strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            result.append(name)
+        write_json_atomic(
+            self.selection_path,
+            {"packages": sorted(result)},
+        )
+        return self.summary()
 
     def _pointer_manifest(self, pointer_path):
         pointer = self._read_json(pointer_path)
@@ -152,8 +187,6 @@ class PortraitPatchManager:
 
     def collect_plan(self):
         records = self.replacement_provider()
-        if not records:
-            return []
         packages, textures = self._inventory()
         grouped = {}
         for record in records:
@@ -206,9 +239,31 @@ class PortraitPatchManager:
                     "png_file": Path(record["source_png"]).name,
                 }
             )
+        target_packages = set(grouped) | set(self._selected_packages())
+        if not target_packages:
+            return []
         result = []
-        for package in sorted(grouped):
-            item = grouped[package]
+        for package in sorted(target_packages):
+            item = grouped.get(
+                package,
+                {
+                    "package": package,
+                    "source": (
+                        self.game_root
+                        / "data"
+                        / "x64"
+                        / "dplcache_release"
+                        / f"{package}.fhm2d"
+                    ).resolve(),
+                    "source_sha256": None,
+                    "replacements": [],
+                },
+            )
+            self.relative_to(item["source"], self.game_root)
+            if not item["source"].is_file():
+                raise FileNotFoundError(
+                    f"游戏纹理包不存在：{item['source']}"
+                )
             item["replacements"].sort(key=lambda row: row["texture_id"])
             result.append(item)
         return result
@@ -304,6 +359,7 @@ class PortraitPatchManager:
         return self._pointer_manifest(self.latest_build_path)
 
     def summary(self):
+        selected_packages = self._selected_packages()
         try:
             plan = self.collect_plan()
             plan_error = None
@@ -332,6 +388,7 @@ class PortraitPatchManager:
         return {
             **state,
             "log_lines": lines,
+            "selected_packages": selected_packages,
             "replacement_count": sum(
                 len(item["replacements"]) for item in plan
             ),

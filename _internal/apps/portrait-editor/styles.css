@@ -155,9 +155,47 @@ h2 {
 }
 
 .deployment-state {
+  position: relative;
   color: var(--muted);
   font-size: 10px;
   line-height: 16px;
+}
+
+.payload-guidance {
+  display: inline-block;
+  margin-left: 10px;
+  color: var(--accent);
+  vertical-align: top;
+}
+
+.payload-guidance summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.payload-guidance-popover {
+  position: absolute;
+  z-index: 20;
+  top: 24px;
+  left: 0;
+  width: min(480px, calc(100vw - 40px));
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  background: #1b2229;
+  color: var(--text);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.payload-guidance-popover strong,
+.payload-guidance-popover span {
+  display: block;
+}
+
+.payload-guidance-popover ul {
+  margin: 6px 0;
+  padding-left: 18px;
 }
 
 .deployment-actions {
@@ -398,6 +436,30 @@ button:disabled {
   cursor: pointer;
 }
 
+.package-check {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 4px;
+  background: rgba(10, 14, 18, 0.82);
+  color: rgba(255, 255, 255, 0.42);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.package-check.selected {
+  border-color: #71d2a4;
+  background: rgba(27, 92, 66, 0.92);
+  color: #effff7;
+}
+
 .portrait-card:hover {
   border-color: #60707f;
 }
@@ -588,6 +650,29 @@ button:disabled {
     linear-gradient(-45deg, transparent 75%, #20262b 75%);
   background-size: 24px 24px;
   background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+}
+
+.preview-package-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  background: rgba(13, 17, 21, 0.84);
+  color: #d2dce4;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  backdrop-filter: blur(6px);
+}
+
+.preview-package-toggle.selected {
+  border-color: #71d2a4;
+  background: rgba(27, 92, 66, 0.9);
+  color: #effff7;
 }
 
 #previewCanvas {
