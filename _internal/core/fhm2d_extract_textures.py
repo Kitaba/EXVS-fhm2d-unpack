@@ -144,7 +144,18 @@ def decode_payload(input_path, strict=True):
     payload_size = 0
     payload_end = None
     for position, (_, file_offset, _, data) in enumerate(decoded[1:], 1):
-        if payload_size + len(data) > declared_size:
+        remaining = declared_size - payload_size
+        if remaining <= 0:
+            break
+        if len(data) > remaining:
+            payload_parts.append(data[:remaining])
+            payload_size += remaining
+            next_block = (
+                decoded[position + 1]
+                if position + 1 < len(decoded)
+                else None
+            )
+            payload_end = next_block[1] if next_block else len(blob)
             break
         payload_parts.append(data)
         payload_size += len(data)

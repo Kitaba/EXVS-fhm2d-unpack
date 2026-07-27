@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import argparse
+import csv
 import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import webbrowser
 from collections import deque
@@ -11,7 +13,12 @@ from datetime import datetime
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
+
+from PIL import Image
+
+
+MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 
 
 class ToolManager:
@@ -87,6 +94,130 @@ class ToolManager:
                 project_dir / "build" / source_name
             ),
         }
+
+    @staticmethod
+    def read_csv(path):
+        with path.open("r", encoding="utf-8-sig", newline="") as stream:
+            return list(csv.DictReader(stream))
+
+    def project_textures(self, value):
+        project_dir = self.resolve_project(value)
+        project = json.loads(
+            (project_dir / "project.json").read_text(encoding="utf-8")
+        )
+        textures = {
+            row["texture_index"]: row
+            for row in self.read_csv(project_dir / project["textures_manifest"])
+        }
+        rows = []
+        for item in self.read_csv(project_dir / project["png_manifest"]):
+            texture = textures[item["texture_index"]]
+            png_path = project_dir / project["editable_png_directory"] / item["png_file"]
+            rows.append(
+                {
+                    "texture_index": int(item["texture_index"]),
+                    "png_file": item["png_file"],
+                    "width": int(item["width"]),
+                    "height": int(item["height"]),
+                    "format": int(texture["fhm2d_format"]),
+                    "modified": self.file_sha256(png_path) != item["sha256"],
+                }
+            )
+        return {
+            "project": str(project_dir),
+            "textures": sorted(rows, key=lambda row: row["texture_index"]),
+        }
+
+    @staticmethod
+    def file_sha256(path):
+        import hashlib
+
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def texture_path(self, value, texture_index):
+        project_dir = self.resolve_project(value)
+        project = json.loads(
+            (project_dir / "project.json").read_text(encoding="utf-8")
+        )
+        for row in self.read_csv(project_dir / project["png_manifest"]):
+            if int(row["texture_index"]) == int(texture_index):
+                path = (
+                    project_dir
+                    / project["editable_png_directory"]
+                    / row["png_file"]
+                ).resolve()
+                if project_dir not in path.parents or not path.is_file():
+                    raise FileNotFoundError(path)
+                return path, row
+        raise KeyError(f"纹理不存在：{texture_index}")
+
+    def save_texture(self, value, texture_index, source_stream, length):
+        if length <= 0 or length > MAX_UPLOAD_BYTES:
+            raise ValueError("图片为空或超过 32 MB")
+        destination, row = self.texture_path(value, texture_index)
+        temporary = None
+        normalized = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=destination.parent, suffix=".upload", delete=False
+            ) as stream:
+                temporary = Path(stream.name)
+                remaining = length
+                while remaining:
+                    chunk = source_stream.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        break
+                    stream.write(chunk)
+                    remaining -= len(chunk)
+            if temporary.stat().st_size != length:
+                raise ValueError("上传内容长度不完整")
+            with Image.open(temporary) as opened:
+                opened.load()
+                expected = (int(row["width"]), int(row["height"]))
+                source_format = opened.format or "UNKNOWN"
+                source_size = opened.size
+                alpha_added = "A" not in opened.getbands()
+                prepared = opened.convert("RGBA")
+                if prepared.size != expected:
+                    scale = min(
+                        expected[0] / prepared.width,
+                        expected[1] / prepared.height,
+                    )
+                    resized = (
+                        max(1, round(prepared.width * scale)),
+                        max(1, round(prepared.height * scale)),
+                    )
+                    prepared = prepared.resize(resized, Image.Resampling.LANCZOS)
+                    canvas = Image.new("RGBA", expected, (0, 0, 0, 0))
+                    canvas.alpha_composite(
+                        prepared,
+                        (
+                            (expected[0] - resized[0]) // 2,
+                            (expected[1] - resized[1]) // 2,
+                        ),
+                    )
+                    prepared = canvas
+                normalized = temporary.with_suffix(".png")
+                prepared.save(normalized, "PNG", optimize=False)
+                prepared.close()
+            os.replace(normalized, destination)
+            return {
+                "texture_index": int(texture_index),
+                "source_format": source_format,
+                "source_size": list(source_size),
+                "normalized_size": list(expected),
+                "resized": source_size != expected,
+                "alpha_added": alpha_added,
+                "modified": True,
+            }
+        finally:
+            for path in (temporary, normalized):
+                if path and path.exists():
+                    path.unlink()
 
     def start(self, payload):
         action = payload.get("action")
@@ -285,9 +416,17 @@ class ToolManager:
             )
         elif kind == "folder":
             script = prefix + (
-                "$d=New-Object System.Windows.Forms.FolderBrowserDialog;"
+                "$d=New-Object System.Windows.Forms.OpenFileDialog;"
+                "$d.Title='选择文件夹（可在地址栏粘贴完整路径）';"
+                "$d.Filter='文件夹|*.folder';"
+                "$d.FileName='选择当前文件夹';"
+                "$d.ValidateNames=$false;"
+                "$d.CheckFileExists=$false;"
+                "$d.CheckPathExists=$true;"
+                "$d.DereferenceLinks=$true;"
                 "if($d.ShowDialog() -eq "
-                "[System.Windows.Forms.DialogResult]::OK){$d.SelectedPath}"
+                "[System.Windows.Forms.DialogResult]::OK){"
+                "[IO.Path]::GetDirectoryName($d.FileName)}"
             )
         else:
             raise ValueError("未知路径选择类型")
@@ -318,6 +457,7 @@ class ToolManager:
             {
                 "workspace": str(self.workspace),
                 "default_project_root": str(self.project_root),
+                "ui_api_version": 3,
             }
         )
         return state
@@ -349,9 +489,27 @@ class Handler(SimpleHTTPRequestHandler):
         return json.loads(self.rfile.read(length) or b"{}")
 
     def do_GET(self):
-        if urlparse(self.path).path == "/api/status":
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/status":
             return self.json_response(self.manager.status())
-        if urlparse(self.path).path.startswith("/api/"):
+        if parsed.path == "/api/texture":
+            try:
+                query = parse_qs(parsed.query)
+                path, _ = self.manager.texture_path(
+                    query.get("project", [""])[0],
+                    query.get("texture_index", [""])[0],
+                )
+                data = path.read_bytes()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            except (ValueError, FileNotFoundError, KeyError) as exc:
+                return self.json_response({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        if parsed.path.startswith("/api/"):
             return self.json_response(
                 {"error": "API 不存在"}, HTTPStatus.NOT_FOUND
             )
@@ -372,6 +530,12 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/project-info":
                 return self.json_response(
                     self.manager.project_info(
+                        self.read_json().get("project")
+                    )
+                )
+            if path == "/api/textures":
+                return self.json_response(
+                    self.manager.project_textures(
                         self.read_json().get("project")
                     )
                 )
@@ -398,6 +562,27 @@ class Handler(SimpleHTTPRequestHandler):
             return self.json_response(
                 {"error": str(exc)}, HTTPStatus.NOT_FOUND
             )
+        except (ValueError, OSError, KeyError) as exc:
+            return self.json_response(
+                {"error": str(exc)}, HTTPStatus.BAD_REQUEST
+            )
+
+    def do_PUT(self):
+        parsed = urlparse(self.path)
+        if parsed.path != "/api/texture":
+            return self.json_response(
+                {"error": "API 不存在"}, HTTPStatus.NOT_FOUND
+            )
+        try:
+            query = parse_qs(parsed.query)
+            length = int(self.headers.get("Content-Length", "0"))
+            result = self.manager.save_texture(
+                query.get("project", [""])[0],
+                query.get("texture_index", [""])[0],
+                self.rfile,
+                length,
+            )
+            return self.json_response(result)
         except (ValueError, OSError, KeyError) as exc:
             return self.json_response(
                 {"error": str(exc)}, HTTPStatus.BAD_REQUEST

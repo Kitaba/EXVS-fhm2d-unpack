@@ -174,7 +174,14 @@ def integral(array):
     )
 
 
-def locate_navigator_slot(image, width, height, y_ratio):
+def locate_navigator_slot(
+    image,
+    width,
+    height,
+    y_ratio,
+    min_y=1,
+    exclude_container=None,
+):
     rgba = np.asarray(image, dtype=np.uint8)
     alpha = rgba[:, :, 3]
     gap = (alpha <= 16).astype(np.int32)
@@ -202,7 +209,7 @@ def locate_navigator_slot(image, width, height, y_ratio):
         int(canvas_height * y_ratio) - height,
     )
     xs = np.arange(1, canvas_width - width - 1)
-    ys = np.arange(1, max_y + 1)
+    ys = np.arange(max(1, int(min_y)), max_y + 1)
     if len(xs) == 0 or len(ys) == 0:
         return None
     y_grid, x_grid = np.ix_(ys, xs)
@@ -217,6 +224,17 @@ def locate_navigator_slot(image, width, height, y_ratio):
         - column_integral[y_grid, x_grid + width]
     ) / (2 * width + 2 * height)
     score = coverage[np.ix_(ys, xs)] + 0.5 * boundary
+    if exclude_container is not None:
+        left, top, right, bottom = exclude_container
+        contained = (
+            (x_grid >= left)
+            & (x_grid + width <= right)
+            & (y_grid >= top)
+            & (y_grid + height <= bottom)
+        )
+        score = np.where(contained, -np.inf, score)
+        if not np.isfinite(score).any():
+            return None
     best = np.unravel_index(np.argmax(score), score.shape)
     y = int(ys[best[0]])
     x = int(xs[best[1]])
@@ -457,9 +475,41 @@ def build_composition(item, texture_root):
     if item["category"] in NAVIGATOR_CATEGORIES:
         y_ratio = 0.6 if item["category"] == "outgame_navigator" else 0.95
         located = []
-        for dimensions, family_rows in families.items():
+        family_items = sorted(
+            families.items(),
+            key=lambda value: value[0][0] * value[0][1],
+        )
+        mouth_min_y = 1
+        eye_container = None
+        if len(family_items) >= 2:
+            eye_dimensions, _ = family_items[-1]
+            eye_anchor = locate_navigator_slot(
+                body_image,
+                eye_dimensions[0],
+                eye_dimensions[1],
+                y_ratio,
+            )
+            if eye_anchor is not None:
+                mouth_min_y = (
+                    eye_anchor["y"] + int(eye_dimensions[1] * 0.6)
+                )
+                eye_container = (
+                    eye_anchor["x"],
+                    eye_anchor["y"],
+                    eye_anchor["x"] + eye_dimensions[0],
+                    eye_anchor["y"] + eye_dimensions[1],
+                )
+        for family_index, (dimensions, family_rows) in enumerate(
+            family_items
+        ):
+            is_mouth = len(family_items) >= 2 and family_index == 0
             anchor = locate_navigator_slot(
-                body_image, dimensions[0], dimensions[1], y_ratio
+                body_image,
+                dimensions[0],
+                dimensions[1],
+                y_ratio,
+                min_y=mouth_min_y if is_mouth else 1,
+                exclude_container=eye_container if is_mouth else None,
             )
             if (
                 anchor is None
@@ -908,6 +958,7 @@ def validate_command(args):
             )
 
         layers = [composition["body"]]
+        family_anchors = {}
         for family in composition["families"]:
             family_counts[
                 f"{composition['category']}:{family['family']}"
@@ -915,6 +966,7 @@ def validate_command(args):
             anchor = family["anchor"]
             width, height = map(int, family["dimensions"])
             x, y = int(anchor["x"]), int(anchor["y"])
+            family_anchors[family["family"]] = (x, y)
             if x < 0 or y < 0 or x + width > canvas[0] or y + height > canvas[1]:
                 problems.append(
                     f"{prefix}/{family['family']}: anchor is outside canvas"
@@ -927,6 +979,15 @@ def validate_command(args):
                     f"{prefix}/{family['family']}: baseline state is missing"
                 )
             layers.extend(family["states"])
+
+        if (
+            family_anchors.get("mouth") is not None
+            and family_anchors.get("mouth")
+            == family_anchors.get("face_eyes")
+        ):
+            problems.append(
+                f"{prefix}: mouth and face_eyes use the same anchor"
+            )
 
         for layer in layers:
             layer_id = layer["texture_id"]

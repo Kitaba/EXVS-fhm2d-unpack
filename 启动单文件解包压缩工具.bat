@@ -15,7 +15,14 @@ if not exist "%PYTHON%" (
   exit /b 2
 )
 
-powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:8767/api/status' -TimeoutSec 1; if([IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%')){ exit 0 } } catch {}; exit 1" >nul 2>nul
+powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:8767/api/status' -TimeoutSec 1; if([IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%')){ if($j.ui_api_version -ge 3){ exit 0 } else { exit 3 } } } catch {}; exit 1" >nul 2>nul
+set "SERVER_STATE=%ERRORLEVEL%"
+if "%SERVER_STATE%"=="3" (
+  echo INFO: An older single FHM2D tool server is still running.
+  echo Close its console window, then launch this file again.
+  pause
+  exit /b 3
+)
 if not errorlevel 1 (
   start "" "http://127.0.0.1:8767/"
   exit /b 0

@@ -13,11 +13,19 @@ const els = {
   logOutput: document.querySelector("#logOutput"),
   resultText: document.querySelector("#resultText"),
   toast: document.querySelector("#toast"),
+  textureList: document.querySelector("#textureList"),
+  textureImage: document.querySelector("#textureImage"),
+  textureTitle: document.querySelector("#textureTitle"),
+  textureMeta: document.querySelector("#textureMeta"),
+  textureFile: document.querySelector("#textureFile"),
+  uploadTextureButton: document.querySelector("#uploadTextureButton"),
 };
 
 let statusData = null;
 let projectData = null;
 let pollTimer = null;
+let textures = [];
+let selectedTexture = null;
 
 async function api(url, options = {}) {
   const response = await fetch(url, options);
@@ -97,11 +105,82 @@ async function inspectProject() {
     els.projectName.textContent = projectData.source_name;
     els.projectMeta.textContent = `${projectData.texture_count} 张纹理`;
     els.outputPath.value = projectData.default_output;
+    await loadTextures();
   } catch (error) {
     projectData = null;
     els.projectName.textContent = "工程不可用";
     els.projectMeta.textContent = error.message;
     toast(error.message, true);
+  }
+}
+
+function textureUrl(item) {
+  return `/api/texture?project=${encodeURIComponent(projectData.project)}` +
+    `&texture_index=${item.texture_index}&t=${Date.now()}`;
+}
+
+async function loadTextures(preferredIndex = null) {
+  const data = await api("/api/textures", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project: projectData.project }),
+  });
+  textures = data.textures;
+  els.textureList.innerHTML = "";
+  for (const item of textures) {
+    const button = document.createElement("button");
+    button.className = "texture-item";
+    button.innerHTML = `
+      <img src="${textureUrl(item)}" alt="">
+      <span><strong>#${item.texture_index} · ${item.png_file}</strong>
+      <span>${item.width}×${item.height} · 0x${item.format.toString(16).toUpperCase()}</span>
+      ${item.modified ? '<span class="modified">已修改</span>' : ""}</span>`;
+    button.addEventListener("click", () => selectTexture(item, button));
+    els.textureList.appendChild(button);
+    if (preferredIndex === item.texture_index) selectTexture(item, button);
+  }
+  if (!textures.length) {
+    els.textureList.innerHTML = "<p>该工程没有可编辑纹理</p>";
+  } else if (preferredIndex === null) {
+    selectTexture(textures[0], els.textureList.firstElementChild);
+  }
+}
+
+function selectTexture(item, button) {
+  selectedTexture = item;
+  document.querySelectorAll(".texture-item").forEach(
+    element => element.classList.remove("active"),
+  );
+  button?.classList.add("active");
+  els.textureImage.src = textureUrl(item);
+  els.textureTitle.textContent = `纹理 #${item.texture_index} · ${item.png_file}`;
+  els.textureMeta.textContent =
+    `${item.width}×${item.height} · FHM2D 0x${item.format.toString(16).toUpperCase()}` +
+    (item.modified ? " · 已修改" : " · 原始");
+  els.uploadTextureButton.disabled = Boolean(statusData?.running);
+}
+
+async function uploadTexture(file) {
+  if (!projectData || !selectedTexture) return;
+  const index = selectedTexture.texture_index;
+  els.uploadTextureButton.disabled = true;
+  try {
+    const result = await api(
+      `/api/texture?project=${encodeURIComponent(projectData.project)}` +
+      `&texture_index=${index}`,
+      { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: file },
+    );
+    const resized = result.resized
+      ? `，已缩放并透明补边至 ${result.normalized_size.join("×")}`
+      : "";
+    const alpha = result.alpha_added ? "，已添加透明通道" : "";
+    toast(`已导入 ${result.source_format}${resized}${alpha}`);
+    await loadTextures(index);
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    els.textureFile.value = "";
+    els.uploadTextureButton.disabled = !selectedTexture || Boolean(statusData?.running);
   }
 }
 
@@ -181,6 +260,11 @@ document.querySelector("#copyLogButton").addEventListener("click", async () => {
   } catch {
     toast("浏览器未允许访问剪贴板", true);
   }
+});
+
+els.uploadTextureButton.addEventListener("click", () => els.textureFile.click());
+els.textureFile.addEventListener("change", () => {
+  if (els.textureFile.files[0]) uploadTexture(els.textureFile.files[0]);
 });
 
 poll();

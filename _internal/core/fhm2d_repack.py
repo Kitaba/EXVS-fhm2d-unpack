@@ -51,9 +51,26 @@ def decode_container(input_path):
     payload_size = 0
     trailing_offset = stream_trailing_offset
     for position, block in enumerate(blocks[1:], 1):
-        if payload_size + block["uncompressed_size"] > declared_payload_size:
+        remaining = declared_payload_size - payload_size
+        if remaining <= 0:
             trailing_offset = block["file_offset"]
             break
+        if block["uncompressed_size"] > remaining:
+            # Some containers place the logical payload boundary inside a
+            # deflate stream. Keep the stream intact physically, but expose
+            # only its prefix as editable payload.
+            block["payload_size"] = remaining
+            block["preserved_suffix"] = block["data"][remaining:]
+            payload_blocks.append(block)
+            payload_size += remaining
+            trailing_offset = (
+                blocks[position + 1]["file_offset"]
+                if position + 1 < len(blocks)
+                else stream_trailing_offset
+            )
+            break
+        block["payload_size"] = block["uncompressed_size"]
+        block["preserved_suffix"] = b""
         payload_blocks.append(block)
         payload_size += block["uncompressed_size"]
         if payload_size == declared_payload_size:
@@ -80,7 +97,10 @@ def decode_container(input_path):
             index_block["data"], block, data_base
         )
 
-    payload = b"".join(block["data"] for block in payload_blocks)
+    payload = b"".join(
+        block["data"][: block["payload_size"]]
+        for block in payload_blocks
+    )
     return {
         "blob": blob,
         "header": header,
@@ -113,7 +133,7 @@ def consecutive_runs(values):
     return runs
 
 
-def find_bulk_size_table(index_data, blocks):
+def bulk_size_table_matches(index_data, blocks):
     matches = []
     required = 8 * (len(blocks) - 1) + 2
     for offset in range(0, len(index_data) - required + 1):
@@ -126,6 +146,11 @@ def find_bulk_size_table(index_data, blocks):
             for index, block in enumerate(blocks)
         ):
             matches.append(offset)
+    return matches
+
+
+def find_bulk_size_table(index_data, blocks):
+    matches = bulk_size_table_matches(index_data, blocks)
     if len(matches) != 1:
         raise ValueError(
             f"expected one bulk size table for blocks "
@@ -137,6 +162,8 @@ def find_bulk_size_table(index_data, blocks):
 def bulk_table_layout(index_data, table_offset, block_count,
                       expected_start, expected_end):
     end_offset = table_offset + 8 * block_count + 0x20
+    if end_offset + 4 > len(index_data):
+        raise ValueError("bulk table extends beyond index data")
     if (
         struct.unpack_from("<I", index_data, table_offset - 0x0E)[0]
         == expected_start
@@ -144,20 +171,69 @@ def bulk_table_layout(index_data, table_offset, block_count,
         == expected_end
     ):
         return table_offset - 0x0E, end_offset
-    for start_delta in (0x13, 0x0D):
+    start_matches = []
+    for start_delta in range(0x09, 0x21):
         shifted_start_offset = table_offset - start_delta
+        if shifted_start_offset < 0:
+            continue
         if (
             struct.unpack_from("<I", index_data, shifted_start_offset)[0]
             == expected_start
         ):
-            shifted_end = (
-                end_offset
-                if struct.unpack_from("<I", index_data, end_offset)[0]
-                == expected_end
-                else None
-            )
-            return shifted_start_offset, shifted_end
+            start_matches.append(shifted_start_offset)
+    if len(start_matches) == 1:
+        shifted_end = (
+            end_offset
+            if struct.unpack_from("<I", index_data, end_offset)[0]
+            == expected_end
+            else None
+        )
+        return start_matches[0], shifted_end
     raise ValueError("bulk table offset fields are not recognized")
+
+
+def partition_bulk_tables(index_data, blocks, data_base):
+    """Split a no-catalog block run into its actual size-table records."""
+    partitions = []
+    position = 0
+    while position < len(blocks):
+        candidates = []
+        for end in range(len(blocks), position, -1):
+            candidate_blocks = blocks[position:end]
+            expected_start = candidate_blocks[0]["file_offset"] - data_base
+            expected_end = (
+                candidate_blocks[-1]["file_offset"]
+                + candidate_blocks[-1]["compressed_size"]
+                - data_base
+            )
+            for table_offset in bulk_size_table_matches(
+                index_data, candidate_blocks
+            ):
+                try:
+                    layout = bulk_table_layout(
+                        index_data,
+                        table_offset,
+                        len(candidate_blocks),
+                        expected_start,
+                        expected_end,
+                    )
+                except ValueError:
+                    continue
+                candidates.append(
+                    (end, table_offset, layout, candidate_blocks)
+                )
+            if candidates:
+                break
+        if len(candidates) != 1:
+            first = blocks[position]["index"]
+            raise ValueError(
+                f"could not identify one bulk table beginning at block "
+                f"{first}: found {[(item[0], item[1]) for item in candidates]}"
+            )
+        end, table_offset, layout, candidate_blocks = candidates[0]
+        partitions.append((candidate_blocks, table_offset, layout))
+        position = end
+    return partitions
 
 
 def find_trailing_offset_references(index_data, compressed_size, trailing_size):
@@ -190,11 +266,11 @@ def rebuild_container(container, payload):
     block_updates = []
 
     for block in container["payload_blocks"]:
-        block_size = block["uncompressed_size"]
+        block_size = block["payload_size"]
         block_data = payload[payload_offset : payload_offset + block_size]
         if len(block_data) != block_size:
             raise ValueError(f"payload ends inside block {block['index']}")
-        compressed = compress_raw(block_data)
+        compressed = compress_raw(block_data + block["preserved_suffix"])
         compressed_payload_blocks.append(compressed)
         block_updates.append(
             {
@@ -235,47 +311,39 @@ def rebuild_container(container, payload):
         block["index"]: block for block in container["payload_blocks"]
     }
     for first, last in consecutive_runs(blocks_without_catalog):
-        bulk_blocks = [
+        no_catalog_blocks = [
             blocks_by_index[index] for index in range(first, last + 1)
         ]
-        table_offset = find_bulk_size_table(
-            container["index_data"], bulk_blocks
-        )
         original_data_base = container["payload_blocks"][0]["file_offset"]
-        original_start = (
-            bulk_blocks[0]["file_offset"] - original_data_base
-        )
-        original_end = (
-            bulk_blocks[-1]["file_offset"]
-            + bulk_blocks[-1]["compressed_size"]
-            - original_data_base
-        )
-        start_offset, end_offset = bulk_table_layout(
-            container["index_data"], table_offset,
-            len(bulk_blocks),
-            original_start, original_end,
-        )
-        first_update = updates_by_index[first]
-        relative_start = first_update["relative_compressed_offset"]
-        relative_end = relative_start + sum(
-            updates_by_index[index]["compressed_size"]
-            for index in range(first, last + 1)
-        )
-        struct.pack_into("<I", index_data, start_offset, relative_start)
-        for table_index, block_index in enumerate(range(first, last + 1)):
-            compressed_size = updates_by_index[block_index]["compressed_size"]
-            if compressed_size > 0xFFFF:
-                raise ValueError(
-                    f"bulk block {block_index} compressed size does not fit u16"
-                )
-            struct.pack_into(
-                "<H",
-                index_data,
-                table_offset + 8 * table_index,
-                compressed_size,
+        for bulk_blocks, table_offset, layout in partition_bulk_tables(
+            container["index_data"], no_catalog_blocks, original_data_base
+        ):
+            start_offset, end_offset = layout
+            first_index = bulk_blocks[0]["index"]
+            last_index = bulk_blocks[-1]["index"]
+            first_update = updates_by_index[first_index]
+            relative_start = first_update["relative_compressed_offset"]
+            relative_end = relative_start + sum(
+                updates_by_index[index]["compressed_size"]
+                for index in range(first_index, last_index + 1)
             )
-        if end_offset is not None:
-            struct.pack_into("<I", index_data, end_offset, relative_end)
+            struct.pack_into("<I", index_data, start_offset, relative_start)
+            for table_index, block_index in enumerate(
+                range(first_index, last_index + 1)
+            ):
+                compressed_size = updates_by_index[block_index]["compressed_size"]
+                if compressed_size > 0xFFFF:
+                    raise ValueError(
+                        f"bulk block {block_index} compressed size does not fit u16"
+                    )
+                struct.pack_into(
+                    "<H",
+                    index_data,
+                    table_offset + 8 * table_index,
+                    compressed_size,
+                )
+            if end_offset is not None:
+                struct.pack_into("<I", index_data, end_offset, relative_end)
 
     original_compressed_size = sum(
         block["compressed_size"] for block in container["payload_blocks"]
@@ -346,7 +414,17 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
         else stream_trailing_offset
     )
     rebuilt_payload_blocks = rebuilt_blocks[1:]
-    rebuilt_payload = b"".join(block["data"] for block in rebuilt_payload_blocks)
+    rebuilt_payload_parts = []
+    for original, rebuilt_block in zip(
+        original_container["payload_blocks"], rebuilt_payload_blocks
+    ):
+        payload_size = original["payload_size"]
+        rebuilt_payload_parts.append(rebuilt_block["data"][:payload_size])
+        if rebuilt_block["data"][payload_size:] != original["preserved_suffix"]:
+            raise ValueError(
+                f"rebuilt block {rebuilt_block['index']} preserved suffix changed"
+            )
+    rebuilt_payload = b"".join(rebuilt_payload_parts)
     if rebuilt_payload != expected_payload:
         raise ValueError("rebuilt payload does not match requested payload")
     if rebuilt[trailing_offset:] != original_container["trailing"]:
@@ -396,46 +474,44 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
         block["index"]: block for block in rebuilt_payload_blocks
     }
     for first, last in consecutive_runs(original_without_catalog):
-        original_bulk = [
+        no_catalog_blocks = [
             original_by_index[index] for index in range(first, last + 1)
         ]
-        table_offset = find_bulk_size_table(
-            original_container["index_data"], original_bulk
-        )
         original_data_base = original_container["payload_blocks"][0]["file_offset"]
-        original_start = original_bulk[0]["file_offset"] - original_data_base
-        original_end = (
-            original_bulk[-1]["file_offset"]
-            + original_bulk[-1]["compressed_size"]
-            - original_data_base
-        )
-        start_offset, end_offset = bulk_table_layout(
-            original_container["index_data"], table_offset,
-            len(original_bulk),
-            original_start, original_end,
-        )
-        relative_start = (
-            rebuilt_by_index[first]["file_offset"] - data_base
-        )
-        relative_end = (
-            rebuilt_by_index[last]["file_offset"]
-            - data_base
-            + rebuilt_by_index[last]["compressed_size"]
-        )
-        if struct.unpack_from("<I", index_data, start_offset)[0] != relative_start:
-            raise ValueError(f"bulk run {first}..{last} start offset is incorrect")
-        for table_index, block_index in enumerate(range(first, last + 1)):
-            encoded_size = struct.unpack_from(
-                "<H", index_data, table_offset + 8 * table_index
-            )[0]
-            if encoded_size != rebuilt_by_index[block_index]["compressed_size"]:
+        for original_bulk, table_offset, layout in partition_bulk_tables(
+            original_container["index_data"],
+            no_catalog_blocks,
+            original_data_base,
+        ):
+            start_offset, end_offset = layout
+            first_index = original_bulk[0]["index"]
+            last_index = original_bulk[-1]["index"]
+            relative_start = rebuilt_by_index[first_index]["file_offset"] - data_base
+            relative_end = (
+                rebuilt_by_index[last_index]["file_offset"]
+                - data_base
+                + rebuilt_by_index[last_index]["compressed_size"]
+            )
+            if struct.unpack_from("<I", index_data, start_offset)[0] != relative_start:
                 raise ValueError(
-                    f"bulk block {block_index} compressed size is incorrect"
+                    f"bulk run {first_index}..{last_index} start offset is incorrect"
                 )
-        if end_offset is not None and struct.unpack_from(
-            "<I", index_data, end_offset
-        )[0] != relative_end:
-            raise ValueError(f"bulk run {first}..{last} end offset is incorrect")
+            for table_index, block_index in enumerate(
+                range(first_index, last_index + 1)
+            ):
+                encoded_size = struct.unpack_from(
+                    "<H", index_data, table_offset + 8 * table_index
+                )[0]
+                if encoded_size != rebuilt_by_index[block_index]["compressed_size"]:
+                    raise ValueError(
+                        f"bulk block {block_index} compressed size is incorrect"
+                    )
+            if end_offset is not None and struct.unpack_from(
+                "<I", index_data, end_offset
+            )[0] != relative_end:
+                raise ValueError(
+                    f"bulk run {first_index}..{last_index} end offset is incorrect"
+                )
 
     original_compressed_size = sum(
         block["compressed_size"] for block in original_container["payload_blocks"]

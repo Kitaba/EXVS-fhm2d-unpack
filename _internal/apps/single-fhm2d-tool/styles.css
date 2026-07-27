@@ -40,6 +40,47 @@ main {
   display: grid; grid-template-columns: minmax(360px, .8fr) minmax(400px, .9fr) minmax(440px, 1.2fr);
   gap: 12px; padding: 14px;
 }
+.texture-panel {
+  grid-column: 1 / -1; border: 1px solid var(--line); background: var(--panel);
+}
+.texture-workspace { display: grid; grid-template-columns: 300px 1fr; min-height: 520px; }
+.texture-list {
+  max-height: 620px; overflow: auto; padding: 8px; border-right: 1px solid var(--line);
+}
+.texture-list > p { padding: 14px; color: var(--muted); font-size: 10px; }
+.texture-item {
+  width: 100%; display: grid; grid-template-columns: 64px 1fr; gap: 9px;
+  align-items: center; margin-bottom: 6px; padding: 7px; text-align: left;
+  border: 1px solid transparent; background: #12171b;
+}
+.texture-item:hover, .texture-item.active { border-color: var(--accent); }
+.texture-item img {
+  width: 64px; height: 64px; object-fit: contain; background: #090b0d;
+  background-image: linear-gradient(45deg,#252b30 25%,transparent 25%),
+    linear-gradient(-45deg,#252b30 25%,transparent 25%),
+    linear-gradient(45deg,transparent 75%,#252b30 75%),
+    linear-gradient(-45deg,transparent 75%,#252b30 75%);
+  background-size: 16px 16px; background-position: 0 0,0 8px,8px -8px,-8px 0;
+}
+.texture-item strong, .texture-item span { display: block; font-size: 10px; }
+.texture-item span { margin-top: 4px; color: var(--muted); }
+.texture-item .modified { color: var(--good); }
+.texture-preview {
+  display: flex; flex-direction: column; align-items: center; padding: 16px;
+}
+.preview-stage {
+  width: 100%; height: 410px; display: grid; place-items: center; overflow: auto;
+  border: 1px solid var(--line); background-color: #0b0e11;
+  background-image: linear-gradient(45deg,#20262b 25%,transparent 25%),
+    linear-gradient(-45deg,#20262b 25%,transparent 25%),
+    linear-gradient(45deg,transparent 75%,#20262b 75%),
+    linear-gradient(-45deg,transparent 75%,#20262b 75%);
+  background-size: 24px 24px; background-position: 0 0,0 12px,12px -12px,-12px 0;
+}
+.preview-stage img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.texture-preview strong { margin-top: 12px; font-size: 12px; }
+.texture-preview > span, .texture-preview > p { margin-top: 5px; color: var(--muted); font-size: 9px; }
+.texture-preview .primary { width: min(420px,100%); margin-top: 13px; }
 .operation-panel, .task-panel {
   min-height: calc(100vh - 94px); border: 1px solid var(--line); background: var(--panel);
 }

@@ -94,6 +94,31 @@
         <button id="copyLogButton">复制日志</button>
       </footer>
     </section>
+
+    <section class="texture-panel">
+      <div class="panel-heading">
+        <span>03</span>
+        <div>
+          <h2>预览与替换纹理</h2>
+          <p>上传时自动转换 RGBA PNG、等比缩放并透明补边</p>
+        </div>
+      </div>
+      <div class="texture-workspace">
+        <div id="textureList" class="texture-list">
+          <p>选择提取工程后显示纹理</p>
+        </div>
+        <div class="texture-preview">
+          <div class="preview-stage">
+            <img id="textureImage" alt="纹理预览">
+          </div>
+          <strong id="textureTitle">尚未选择纹理</strong>
+          <span id="textureMeta">支持 PNG、JPEG、WEBP、BMP、DDS</span>
+          <input id="textureFile" type="file" accept=".png,.jpg,.jpeg,.webp,.bmp,.dds,image/*" hidden>
+          <button id="uploadTextureButton" class="primary" disabled>上传并替换当前纹理</button>
+          <p>上传会覆盖工程的 png_edit 对应文件；构建时执行透明隐藏色清理和 DDS 编码。</p>
+        </div>
+      </div>
+    </section>
   </main>
 
   <div id="toast" class="toast"></div>
