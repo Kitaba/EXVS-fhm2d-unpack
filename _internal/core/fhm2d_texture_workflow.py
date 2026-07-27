@@ -338,7 +338,7 @@ def convert_changed_pngs(texconv, project_dir, changed_rows, dds_dir):
         if texture_format == FHM2D_BC7_FORMAT:
             texconv_format = "BC7_UNORM"
             expected_dxgi = 98
-            compression_args = ["-bc", "x"]
+            compression_args = ["-bc", "q"]
         elif texture_format == FHM2D_RGBA8_FORMAT:
             texconv_format = "R8G8B8A8_UNORM"
             expected_dxgi = 28
@@ -478,7 +478,7 @@ def build_project(project_dir, output_path, texconv, force=False):
             "sha256": sha256_file(texconv),
             "encoding": (
                 "BC7_UNORM, one mip, DX10 header, CPU, single process, "
-                "maximum BC7 compression"
+                "high-quality BC7 compression"
             ),
         },
     }
