@@ -2,6 +2,7 @@
 import argparse
 import csv
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,7 @@ from fhm2d_extract_textures import (
     scan_textures,
 )
 from png_color_profile import png_color_metadata, retag_png_srgb
+from texture_layout import PACKAGE_CATEGORIES
 
 SUPPORTED_BATCH_FORMATS = {FHM2D_BC7_FORMAT, FHM2D_RGBA8_FORMAT}
 
@@ -46,7 +48,7 @@ def utc_now():
 
 def write_csv_atomic(path, fieldnames, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     with temporary.open("w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=fieldnames)
         writer.writeheader()
@@ -68,6 +70,40 @@ def read_inventory(path):
         return []
     with path.open(encoding="utf-8-sig", newline="") as stream:
         return list(csv.DictReader(stream))
+
+
+def package_directories(package_root):
+    found = {}
+    if not package_root.is_dir():
+        return []
+    for path in sorted(item for item in package_root.iterdir() if item.is_dir()):
+        if path.name in PACKAGE_CATEGORIES:
+            for package_dir in sorted(
+                item for item in path.iterdir() if item.is_dir()
+            ):
+                if package_dir.name in found:
+                    raise ValueError(
+                        f"duplicate package directory: {package_dir.name}"
+                    )
+                found[package_dir.name] = package_dir
+        else:
+            if path.name in found:
+                raise ValueError(f"duplicate package directory: {path.name}")
+            found[path.name] = path
+    return [found[name] for name in sorted(found)]
+
+
+def find_package_directory(package_root, package):
+    direct = package_root / package
+    candidates = [direct] if direct.is_dir() else []
+    candidates.extend(
+        package_root / category / package
+        for category in PACKAGE_CATEGORIES
+        if (package_root / category / package).is_dir()
+    )
+    if len(candidates) > 1:
+        raise ValueError(f"duplicate package directory: {package}")
+    return candidates[0] if candidates else direct
 
 
 def scan_one(path, detail_dir):
@@ -280,7 +316,8 @@ def extract_command(args):
     result_rows = []
     for index, row in enumerate(supported, 1):
         source = Path(row["source"])
-        manifest = package_root / source.stem / "extract_manifest.json"
+        package_dir = find_package_directory(package_root, source.stem)
+        manifest = package_dir / "extract_manifest.json"
         resume_compact = False
         if manifest.is_file() and args.compact and not args.force:
             manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
@@ -295,7 +332,7 @@ def extract_command(args):
                 if not resume_compact:
                     report, _ = extract_file(
                         source,
-                        package_root,
+                        package_dir.parent,
                         strict_payload=False,
                         supported_formats=SUPPORTED_BATCH_FORMATS,
                     )
@@ -308,7 +345,6 @@ def extract_command(args):
                 status = "extracted"
                 error = ""
                 if args.compact:
-                    package_dir = package_root / source.stem
                     compact_package(
                         output_root,
                         package_dir,
@@ -348,7 +384,10 @@ def catalog_command(args):
     output_root = Path(args.output)
     package_root = output_root / "packages"
     rows = []
-    for csv_path in sorted(package_root.glob("*/textures.csv")):
+    for package_dir in package_directories(package_root):
+        csv_path = package_dir / "textures.csv"
+        if not csv_path.is_file():
+            continue
         package = csv_path.parent.name
         with csv_path.open(encoding="utf-8-sig", newline="") as stream:
             for row in csv.DictReader(stream):
@@ -362,7 +401,7 @@ def catalog_command(args):
                     }.get(row.get("fhm2d_format"), "unknown")
                 png_name = Path(row["dds_output"]).with_suffix(".png").name
                 row["png_output"] = str(
-                    Path("packages") / package / "png" / png_name
+                    csv_path.parent.relative_to(output_root) / "png" / png_name
                 )
                 row["png_available"] = (
                     output_root / row["png_output"]
@@ -500,7 +539,7 @@ def convert_dds_batch(texconv, dds_files, png_dir):
 
 def png_command(args):
     output_root = Path(args.output)
-    package_dirs = sorted((output_root / "packages").glob("*"))
+    package_dirs = package_directories(output_root / "packages")
     texconv = find_texconv(args.texconv)
     catalog_path = output_root / "inventory" / "textures.csv"
     catalog = read_inventory(catalog_path)

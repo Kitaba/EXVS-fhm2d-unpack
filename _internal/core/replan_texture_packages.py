@@ -60,6 +60,29 @@ def classify(package, categories):
     return DEFAULT_PACKAGE_CATEGORY
 
 
+def discover_packages(package_root, categories):
+    package_to_category = {}
+    flat_packages = []
+    for category in PACKAGE_CATEGORIES:
+        category_root = package_root / category
+        if not category_root.is_dir():
+            continue
+        for path in sorted(item for item in category_root.iterdir() if item.is_dir()):
+            if path.name in package_to_category:
+                raise ValueError(f"duplicate categorized package: {path.name}")
+            package_to_category[path.name] = category
+    for path in sorted(item for item in package_root.iterdir() if item.is_dir()):
+        if path.name in PACKAGE_CATEGORIES:
+            continue
+        if path.name in package_to_category:
+            raise ValueError(
+                f"package exists both flat and categorized: {path.name}"
+            )
+        package_to_category[path.name] = classify(path.name, categories)
+        flat_packages.append(path)
+    return package_to_category, flat_packages
+
+
 def rewrite_package_path(value, package, category):
     if not value:
         return value
@@ -167,35 +190,41 @@ def main(argv=None):
         mapping_root = Path(args.mapping).resolve()
         package_root = all_textures / PACKAGE_ROOT_NAME
         categories = package_categories(mapping_root)
-        package_dirs = sorted(
-            path for path in package_root.iterdir()
-            if path.is_dir() and path.name not in PACKAGE_CATEGORIES
+        package_to_category, flat_packages = discover_packages(
+            package_root, categories
         )
-        package_to_category = {
-            path.name: classify(path.name, categories)
-            for path in package_dirs
-        }
         counts = Counter(package_to_category.values())
-        print(json.dumps({"packages": len(package_dirs), "categories": counts}, default=dict))
+        print(
+            json.dumps(
+                {
+                    "packages": len(package_to_category),
+                    "unplanned_packages": len(flat_packages),
+                    "categories": counts,
+                },
+                default=dict,
+            )
+        )
         if not args.apply:
             for category in PACKAGE_CATEGORIES:
                 print(f"{category}: {counts.get(category, 0)}")
             print("dry-run: no files changed; rerun with --apply")
             return 0
 
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         backup_root = mapping_root / "replan-backups" / stamp
         backup_manifests(all_textures, mapping_root, backup_root)
         for category in PACKAGE_CATEGORIES:
             (package_root / category).mkdir(parents=True, exist_ok=True)
-        manifest = []
-        for source in package_dirs:
+        for source in flat_packages:
             category = package_to_category[source.name]
             target = package_root / category / source.name
             if target.exists():
                 raise FileExistsError(f"target already exists: {target}")
             shutil.move(str(source), str(target))
-            manifest.append({"package": source.name, "category": category})
+        manifest = [
+            {"package": package, "category": category}
+            for package, category in sorted(package_to_category.items())
+        ]
 
         changed = {
             "textures_csv": update_csv_paths(
@@ -244,7 +273,19 @@ def main(argv=None):
             ),
             encoding="utf-8",
         )
-        print(json.dumps({"applied": True, "changed": changed, "backup": str(backup_root)}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "applied": True,
+                    "moved_packages": len(flat_packages),
+                    "total_packages": len(package_to_category),
+                    "categories": dict(sorted(counts.items())),
+                    "changed": changed,
+                    "backup": str(backup_root),
+                },
+                ensure_ascii=False,
+            )
+        )
         return 0
     except (FileNotFoundError, OSError, ValueError, json.JSONDecodeError) as exc:
         print(exc, file=sys.stderr)
@@ -253,4 +294,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

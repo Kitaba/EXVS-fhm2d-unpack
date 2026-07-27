@@ -26,6 +26,7 @@ ACTION_LABELS = {
     "catalog": "重建纹理目录",
     "validate": "验证全部图片",
     "map": "分类并生成组合映射",
+    "replan": "自动重规划包目录",
     "full": "一键建立完整立绘库",
 }
 
@@ -83,6 +84,7 @@ class JobManager:
     def command(self, stage):
         batch = self.core_root / "fhm2d_batch_textures.py"
         mapper = self.core_root / "texture_asset_mapper.py"
+        replan = self.core_root / "replan_texture_packages.py"
         common = [
             sys.executable,
             str(batch),
@@ -144,6 +146,15 @@ class JobManager:
                 "--mapping",
                 str(self.mapping_root / "mapping.json"),
             ],
+            "replan": [
+                sys.executable,
+                str(replan),
+                "--all-textures",
+                str(self.texture_root),
+                "--mapping",
+                str(self.mapping_root),
+                "--apply",
+            ],
         }
         return commands[stage]
 
@@ -159,6 +170,7 @@ class JobManager:
                 "catalog",
                 "validate",
                 "map",
+                "replan",
                 "map_validate",
             ]
         if action == "map":
@@ -182,7 +194,7 @@ class JobManager:
     def start(self, action):
         if action not in ACTION_LABELS:
             raise ValueError("未知操作")
-        if action != "color" and not self.source_root.is_dir():
+        if action not in ("color", "replan") and not self.source_root.is_dir():
             raise FileNotFoundError(
                 f"未找到游戏资源目录：{self.source_root}"
             )
