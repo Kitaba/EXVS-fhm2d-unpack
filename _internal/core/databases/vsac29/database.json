@@ -6,6 +6,8 @@
   "catalog_signature": "b34d67df5bde3909508b003abc54aae719a1ebdc998837f4bb01b7950b34331b",
   "catalog_layout_signature_algorithm": "stable_texture_layout_v1",
   "catalog_layout_signature": "ee53f5873caadbe69f2fd321d3cca1ce361e8324c865611ae2a7d51ea3471e6a",
+  "catalog_layout_sorted_signature_algorithm": "stable_texture_layout_sorted_v1",
+  "catalog_layout_sorted_signature": "52e2e6d9f15a737fea20db95059f4410c7db53f1abae552985012b674758f024",
   "texture_count": 40325,
   "group_count": 1297,
   "layer_count": 18668,

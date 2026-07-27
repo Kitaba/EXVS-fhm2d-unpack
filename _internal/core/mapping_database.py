@@ -51,6 +51,24 @@ def stable_signature(path, fields, prefix):
     return digest.hexdigest(), count
 
 
+def stable_sorted_signature(path, fields, prefix):
+    records = []
+    with path.open(encoding="utf-8-sig", newline="") as stream:
+        for row in csv.DictReader(stream):
+            records.append(
+                b"\0".join(
+                    row.get(field, "").encode("utf-8")
+                    for field in fields
+                )
+            )
+    digest = hashlib.sha256()
+    digest.update(prefix)
+    for record in sorted(records):
+        digest.update(record)
+        digest.update(b"\n")
+    return digest.hexdigest(), len(records)
+
+
 def catalog_signatures(path):
     catalog, catalog_count = stable_signature(
         path,
@@ -62,11 +80,19 @@ def catalog_signatures(path):
         LAYOUT_SIGNATURE_FIELDS,
         b"EXVSIB_TEXTURE_LAYOUT_SIGNATURE_V1\n",
     )
-    if catalog_count != layout_count:
+    layout_sorted, layout_sorted_count = stable_sorted_signature(
+        path,
+        LAYOUT_SIGNATURE_FIELDS,
+        b"EXVSIB_TEXTURE_LAYOUT_SORTED_SIGNATURE_V1\n",
+    )
+    if not (
+        catalog_count == layout_count == layout_sorted_count
+    ):
         raise AssertionError("catalog signature row counts differ")
     return {
         "catalog": catalog,
         "layout": layout,
+        "layout_sorted": layout_sorted,
         "texture_count": catalog_count,
     }
 
@@ -192,6 +218,10 @@ def create_command(args):
         "catalog_signature": signature,
         "catalog_layout_signature_algorithm": "stable_texture_layout_v1",
         "catalog_layout_signature": signatures["layout"],
+        "catalog_layout_sorted_signature_algorithm": (
+            "stable_texture_layout_sorted_v1"
+        ),
+        "catalog_layout_sorted_signature": signatures["layout_sorted"],
         "texture_count": texture_count,
         "group_count": mapping["group_count"],
         "layer_count": mapping["layer_count"],
@@ -205,7 +235,13 @@ def create_command(args):
     return 0
 
 
-def find_database(database_root, signature, layout_signature, texture_count):
+def find_database(
+    database_root,
+    signature,
+    layout_signature,
+    layout_sorted_signature,
+    texture_count,
+):
     layout_match = None
     for manifest_path in sorted(
         Path(database_root).glob(f"*/{DATABASE_MANIFEST}")
@@ -220,6 +256,16 @@ def find_database(database_root, signature, layout_signature, texture_count):
             and manifest.get("catalog_layout_signature") == layout_signature
         ):
             layout_match = (manifest_path.parent, manifest, "layout")
+        if (
+            layout_match is None
+            and manifest.get("catalog_layout_sorted_signature")
+            == layout_sorted_signature
+        ):
+            layout_match = (
+                manifest_path.parent,
+                manifest,
+                "layout_sorted",
+            )
     return layout_match or (None, None, None)
 
 
@@ -263,6 +309,9 @@ def install_database(
             "source_catalog_sha256": sha256_file(catalog),
             "source_catalog_signature": signatures["catalog"],
             "source_catalog_layout_signature": signatures["layout"],
+            "source_catalog_layout_sorted_signature": signatures[
+                "layout_sorted"
+            ],
             "mapping_database_catalog_signature": manifest["catalog_signature"],
             "mapping_database_match": match_mode,
             "previews_mode": "lazy",
@@ -297,6 +346,7 @@ def apply_command(args):
         Path(args.database_root),
         signatures["catalog"],
         signatures["layout"],
+        signatures["layout_sorted"],
         signatures["texture_count"],
     )
     if database:
@@ -312,11 +362,32 @@ def apply_command(args):
         return 0
 
     if args.require_database:
+        candidates = []
+        for manifest_path in sorted(
+            Path(args.database_root).glob(f"*/{DATABASE_MANIFEST}")
+        ):
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            candidates.append(
+                {
+                    "game_version": manifest.get("game_version"),
+                    "texture_count": manifest.get("texture_count"),
+                    "layout_signature": manifest.get(
+                        "catalog_layout_signature"
+                    ),
+                    "layout_sorted_signature": manifest.get(
+                        "catalog_layout_sorted_signature"
+                    ),
+                }
+            )
         raise ValueError(
             "No matching prebuilt mapping database. Pixel-only texture "
             "changes are allowed, but the package/group/index/dimension/"
             "format layout must match a supported VSAC29 catalog. Finish "
-            f"the scan and PNG extraction first (textures={signatures['texture_count']})."
+            "the scan and PNG extraction first "
+            f"(textures={signatures['texture_count']}, "
+            f"layout={signatures['layout']}, "
+            f"layout_sorted={signatures['layout_sorted']}, "
+            f"available={json.dumps(candidates, ensure_ascii=False)})."
         )
 
     print(

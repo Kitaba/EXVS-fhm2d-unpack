@@ -664,8 +664,28 @@ def main():
         core_root,
         PortraitHandler.data.replacement_records,
     )
-    server = ThreadingHTTPServer((args.host, args.port), PortraitHandler)
-    url = f"http://{args.host}:{args.port}"
+    server = None
+    bind_errors = []
+    for port in range(args.port, args.port + 11):
+        try:
+            server = ThreadingHTTPServer(
+                (args.host, port), PortraitHandler
+            )
+            if port != args.port:
+                print(
+                    f"Port {args.port} is unavailable; using {port}.",
+                    flush=True,
+                )
+            break
+        except OSError as exc:
+            bind_errors.append(f"{port}: {exc}")
+    if server is None:
+        raise OSError(
+            "No available portrait editor port in "
+            f"{args.port}..{args.port + 10}: {'; '.join(bind_errors)}"
+        )
+    actual_port = server.server_address[1]
+    url = f"http://{args.host}:{actual_port}"
     print(
         f"EXVSIB portrait editor: {url}",
         flush=True,
