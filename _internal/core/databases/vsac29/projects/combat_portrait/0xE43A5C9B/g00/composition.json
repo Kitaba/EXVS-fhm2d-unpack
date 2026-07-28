@@ -27,7 +27,7 @@
       "anchor": {
         "x": 213,
         "y": 298,
-        "rmse": 0.7693458098089614,
+        "rmse": 0.7616389808848254,
         "full_rmse": 38.072049909136055,
         "stable_border_pixels": 2771.96484375,
         "method": "stable_border_rgba_ssd"
@@ -50,7 +50,7 @@
           "mapping_method": "stable_border_rgba_ssd",
           "coverage": "",
           "boundary": "",
-          "match_rmse": 0.7693458098089614,
+          "match_rmse": 0.7616389808848254,
           "source_png": "packages\\0xE43A5C9B\\png\\g00_00002_96x76_bc7.png",
           "replacement_path": "combat_portrait\\0xE43A5C9B\\g00\\g00_00002_96x76_bc7.png"
         },
@@ -70,7 +70,7 @@
           "mapping_method": "stable_border_rgba_ssd",
           "coverage": "",
           "boundary": "",
-          "match_rmse": 0.7693458098089614,
+          "match_rmse": 0.7616389808848254,
           "source_png": "packages\\0xE43A5C9B\\png\\g00_00003_96x76_bc7.png",
           "replacement_path": "combat_portrait\\0xE43A5C9B\\g00\\g00_00003_96x76_bc7.png"
         }

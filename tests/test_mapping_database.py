@@ -90,6 +90,34 @@ class MappingDatabaseSignatureTests(unittest.TestCase):
         self.assertEqual(manifest["catalog_signature"], "original-pixels")
         self.assertEqual(match_mode, "layout")
 
+    def test_database_falls_back_to_sorted_layout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            database = root / "vsac29"
+            database.mkdir()
+            (database / "database.json").write_text(
+                json.dumps(
+                    {
+                        "catalog_signature": "original-pixels",
+                        "catalog_layout_signature": "different-order",
+                        "catalog_layout_sorted_signature": "same-layout",
+                        "texture_count": 1,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            selected, manifest, match_mode = find_database(
+                root,
+                signature="modified-pixels",
+                layout_signature="different-layout",
+                layout_sorted_signature="same-layout",
+                texture_count=1,
+            )
+
+        self.assertEqual(selected.name, "vsac29")
+        self.assertEqual(match_mode, "layout_sorted")
+
     def test_database_rejects_incomplete_catalog(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

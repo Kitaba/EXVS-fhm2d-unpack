@@ -455,6 +455,7 @@ class ToolManager:
             state["log_lines"] = list(self.lines)
         state.update(
             {
+                "app_id": "exvs_single_fhm2d_tool",
                 "workspace": str(self.workspace),
                 "default_project_root": str(self.project_root),
                 "ui_api_version": 3,
@@ -596,14 +597,32 @@ def main():
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--core", required=True)
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8767)
+    parser.add_argument("--port", type=int, default=17885)
     parser.add_argument("--open-browser", action="store_true")
     args = parser.parse_args()
 
     Handler.web_root = Path(__file__).resolve().parent
     Handler.manager = ToolManager(args.workspace, args.core)
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    url = f"http://{args.host}:{args.port}"
+    server = None
+    bind_errors = []
+    for port in range(args.port, args.port + 10):
+        try:
+            server = ThreadingHTTPServer((args.host, port), Handler)
+            if port != args.port:
+                print(
+                    f"Port {args.port} is unavailable; using {port}.",
+                    flush=True,
+                )
+            break
+        except OSError as exc:
+            bind_errors.append(f"{port}: {exc}")
+    if server is None:
+        raise OSError(
+            "No available single FHM2D tool port in "
+            f"{args.port}..{args.port + 9}: {'; '.join(bind_errors)}"
+        )
+    actual_port = server.server_address[1]
+    url = f"http://{args.host}:{actual_port}"
     print(f"EXVS single FHM2D tool: {url}", flush=True)
     if args.open_browser and not os.environ.get("EXVSIB_NO_BROWSER"):
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()

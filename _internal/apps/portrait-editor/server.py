@@ -156,6 +156,7 @@ class PortraitData:
             if self.is_replaced(layer)
         )
         return {
+            "app_id": "exvs_portrait_editor",
             "title": "EXVSIB 立绘编辑器",
             "patch_api_version": 2,
             "workspace": str(self.mapping_root.parent),
@@ -625,7 +626,7 @@ class PortraitHandler(SimpleHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description="EXVSIB portrait editor")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--port", type=int, default=17865)
     parser.add_argument("--workspace")
     parser.add_argument("--game-root")
     parser.add_argument("--core")
@@ -666,7 +667,7 @@ def main():
     )
     server = None
     bind_errors = []
-    for port in range(args.port, args.port + 11):
+    for port in range(args.port, args.port + 10):
         try:
             server = ThreadingHTTPServer(
                 (args.host, port), PortraitHandler
@@ -682,7 +683,7 @@ def main():
     if server is None:
         raise OSError(
             "No available portrait editor port in "
-            f"{args.port}..{args.port + 10}: {'; '.join(bind_errors)}"
+            f"{args.port}..{args.port + 9}: {'; '.join(bind_errors)}"
         )
     actual_port = server.server_address[1]
     url = f"http://{args.host}:{actual_port}"

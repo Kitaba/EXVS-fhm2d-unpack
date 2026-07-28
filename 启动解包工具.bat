@@ -30,7 +30,15 @@ if not errorlevel 1 (
   exit /b 0
 )
 
-"%PYTHON%" "%SERVER%" --game-root "%GAME_ROOT%" --workspace "%WORKSPACE%" --core "%CORE%" --port 8766 --open-browser
+for /L %%P in (17875,1,17884) do (
+  powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:%%P/api/status' -TimeoutSec 1; if($j.app_id -eq 'exvs_unpack_tool' -and [IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%')){ exit 0 } } catch {}; exit 1" >nul 2>nul
+  if not errorlevel 1 (
+    start "" "http://127.0.0.1:%%P/"
+    exit /b 0
+  )
+)
+
+"%PYTHON%" "%SERVER%" --game-root "%GAME_ROOT%" --workspace "%WORKSPACE%" --core "%CORE%" --port 17875 --open-browser
 set "TOOL_EXIT=%ERRORLEVEL%"
 if not "%TOOL_EXIT%"=="0" (
   echo.

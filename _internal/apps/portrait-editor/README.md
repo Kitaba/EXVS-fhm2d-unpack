@@ -34,7 +34,7 @@ powershell -ExecutionPolicy Bypass -File .\patch-edit\portrait-editor\start-edit
 浏览器打开：
 
 ```text
-http://127.0.0.1:8765
+http://127.0.0.1:17865
 ```
 
 不要直接双击 `index.html`。页面需要本地服务读取映射、原图并保存替换文件。
@@ -77,7 +77,7 @@ http://127.0.0.1:8765
 默认只监听本机：
 
 ```powershell
-python .\patch-edit\portrait-editor\server.py --host 127.0.0.1 --port 8765
+python .\patch-edit\portrait-editor\server.py --host 127.0.0.1 --port 17865
 ```
 
 该服务没有账户或网络访问控制，不应使用 `0.0.0.0` 暴露到不可信网络。

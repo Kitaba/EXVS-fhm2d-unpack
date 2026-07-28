@@ -28,8 +28,8 @@
         "x": 212,
         "y": 280,
         "rmse": 0.0,
-        "full_rmse": 43.05602844959884,
-        "stable_border_pixels": 3651.709716796875,
+        "full_rmse": 43.05602713463091,
+        "stable_border_pixels": 3651.7099609375,
         "method": "stable_border_rgba_ssd"
       },
       "baseline_texture_id": "0x283920BC/g00/00002",

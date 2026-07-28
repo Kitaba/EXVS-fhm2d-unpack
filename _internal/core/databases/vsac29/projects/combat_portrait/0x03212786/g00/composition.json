@@ -28,7 +28,7 @@
         "x": 219,
         "y": 295,
         "rmse": 0.1767766952966369,
-        "full_rmse": 42.340584114779496,
+        "full_rmse": 42.3405825067656,
         "stable_border_pixels": 2560.0,
         "method": "stable_border_rgba_ssd"
       },

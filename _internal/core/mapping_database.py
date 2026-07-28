@@ -239,8 +239,8 @@ def find_database(
     database_root,
     signature,
     layout_signature,
-    layout_sorted_signature,
     texture_count,
+    layout_sorted_signature=None,
 ):
     layout_match = None
     for manifest_path in sorted(
@@ -258,6 +258,7 @@ def find_database(
             layout_match = (manifest_path.parent, manifest, "layout")
         if (
             layout_match is None
+            and layout_sorted_signature is not None
             and manifest.get("catalog_layout_sorted_signature")
             == layout_sorted_signature
         ):

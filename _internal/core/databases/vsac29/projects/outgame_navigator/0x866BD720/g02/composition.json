@@ -1,0 +1,186 @@
+{
+  "mapping_version": 1,
+  "category": "outgame_navigator",
+  "package": "0x866BD720",
+  "group": "g02",
+  "canvas": {
+    "width": 872,
+    "height": 960
+  },
+  "body": {
+    "texture_id": "0x866BD720/g02/00000",
+    "role": "body",
+    "embedded_index": 0,
+    "width": 872,
+    "height": 960,
+    "source_png": "packages\\0x866BD720\\png\\g02_00000_872x960_bc7.png",
+    "replacement_path": "outgame_navigator\\0x866BD720\\g02\\g02_00000_872x960_bc7.png"
+  },
+  "families": [
+    {
+      "family": "mouth",
+      "role": "mouth",
+      "dimensions": [
+        52,
+        48
+      ],
+      "anchor": {
+        "x": 240,
+        "y": 396,
+        "coverage": 1.0,
+        "boundary": 1.0,
+        "score": 1.5,
+        "method": "alpha_gap_rectangle"
+      },
+      "baseline_texture_id": "0x866BD720/g02/00001",
+      "states": [
+        {
+          "category": "outgame_navigator",
+          "package": "0x866BD720",
+          "group": "g02",
+          "texture_id": "0x866BD720/g02/00001",
+          "role": "mouth",
+          "family": "mouth",
+          "state_index": 0,
+          "embedded_index": 1,
+          "width": 52,
+          "height": 48,
+          "anchor_x": 240,
+          "anchor_y": 396,
+          "mapping_method": "alpha_gap_rectangle",
+          "coverage": 1.0,
+          "boundary": 1.0,
+          "match_rmse": "",
+          "source_png": "packages\\0x866BD720\\png\\g02_00001_52x48_bc7.png",
+          "replacement_path": "outgame_navigator\\0x866BD720\\g02\\g02_00001_52x48_bc7.png"
+        },
+        {
+          "category": "outgame_navigator",
+          "package": "0x866BD720",
+          "group": "g02",
+          "texture_id": "0x866BD720/g02/00002",
+          "role": "mouth",
+          "family": "mouth",
+          "state_index": 1,
+          "embedded_index": 2,
+          "width": 52,
+          "height": 48,
+          "anchor_x": 240,
+          "anchor_y": 396,
+          "mapping_method": "alpha_gap_rectangle",
+          "coverage": 1.0,
+          "boundary": 1.0,
+          "match_rmse": "",
+          "source_png": "packages\\0x866BD720\\png\\g02_00002_52x48_bc7.png",
+          "replacement_path": "outgame_navigator\\0x866BD720\\g02\\g02_00002_52x48_bc7.png"
+        },
+        {
+          "category": "outgame_navigator",
+          "package": "0x866BD720",
+          "group": "g02",
+          "texture_id": "0x866BD720/g02/00003",
+          "role": "mouth",
+          "family": "mouth",
+          "state_index": 2,
+          "embedded_index": 3,
+          "width": 52,
+          "height": 48,
+          "anchor_x": 240,
+          "anchor_y": 396,
+          "mapping_method": "alpha_gap_rectangle",
+          "coverage": 1.0,
+          "boundary": 1.0,
+          "match_rmse": "",
+          "source_png": "packages\\0x866BD720\\png\\g02_00003_52x48_bc7.png",
+          "replacement_path": "outgame_navigator\\0x866BD720\\g02\\g02_00003_52x48_bc7.png"
+        }
+      ]
+    },
+    {
+      "family": "face_eyes",
+      "role": "face_eyes",
+      "dimensions": [
+        152,
+        84
+      ],
+      "anchor": {
+        "x": 197,
+        "y": 297,
+        "coverage": 1.0,
+        "boundary": 1.0,
+        "score": 1.5,
+        "method": "alpha_gap_rectangle"
+      },
+      "baseline_texture_id": "0x866BD720/g02/00004",
+      "states": [
+        {
+          "category": "outgame_navigator",
+          "package": "0x866BD720",
+          "group": "g02",
+          "texture_id": "0x866BD720/g02/00004",
+          "role": "face_eyes",
+          "family": "face_eyes",
+          "state_index": 0,
+          "embedded_index": 4,
+          "width": 152,
+          "height": 84,
+          "anchor_x": 197,
+          "anchor_y": 297,
+          "mapping_method": "alpha_gap_rectangle",
+          "coverage": 1.0,
+          "boundary": 1.0,
+          "match_rmse": "",
+          "source_png": "packages\\0x866BD720\\png\\g02_00004_152x84_bc7.png",
+          "replacement_path": "outgame_navigator\\0x866BD720\\g02\\g02_00004_152x84_bc7.png"
+        },
+        {
+          "category": "outgame_navigator",
+          "package": "0x866BD720",
+          "group": "g02",
+          "texture_id": "0x866BD720/g02/00005",
+          "role": "face_eyes",
+          "family": "face_eyes",
+          "state_index": 1,
+          "embedded_index": 5,
+          "width": 152,
+          "height": 84,
+          "anchor_x": 197,
+          "anchor_y": 297,
+          "mapping_method": "alpha_gap_rectangle",
+          "coverage": 1.0,
+          "boundary": 1.0,
+          "match_rmse": "",
+          "source_png": "packages\\0x866BD720\\png\\g02_00005_152x84_bc7.png",
+          "replacement_path": "outgame_navigator\\0x866BD720\\g02\\g02_00005_152x84_bc7.png"
+        },
+        {
+          "category": "outgame_navigator",
+          "package": "0x866BD720",
+          "group": "g02",
+          "texture_id": "0x866BD720/g02/00006",
+          "role": "face_eyes",
+          "family": "face_eyes",
+          "state_index": 2,
+          "embedded_index": 6,
+          "width": 152,
+          "height": 84,
+          "anchor_x": 197,
+          "anchor_y": 297,
+          "mapping_method": "alpha_gap_rectangle",
+          "coverage": 1.0,
+          "boundary": 1.0,
+          "match_rmse": "",
+          "source_png": "packages\\0x866BD720\\png\\g02_00006_152x84_bc7.png",
+          "replacement_path": "outgame_navigator\\0x866BD720\\g02\\g02_00006_152x84_bc7.png"
+        }
+      ]
+    }
+  ],
+  "draw_order": [
+    "body",
+    "mouth",
+    "face_eyes"
+  ],
+  "blend": "straight_alpha_source_over",
+  "warnings": []
+}

@@ -27,7 +27,7 @@
       "anchor": {
         "x": 91,
         "y": 299,
-        "rmse": 3.534168605445081,
+        "rmse": 3.534290250096846,
         "full_rmse": 36.66512689946361,
         "stable_border_pixels": 1791.98046875,
         "method": "stable_border_rgba_ssd"
@@ -50,7 +50,7 @@
           "mapping_method": "stable_border_rgba_ssd",
           "coverage": "",
           "boundary": "",
-          "match_rmse": 3.534168605445081,
+          "match_rmse": 3.534290250096846,
           "source_png": "packages\\0x629A127B\\png\\g00_00002_64x64_bc7.png",
           "replacement_path": "combat_portrait\\0x629A127B\\g00\\g00_00002_64x64_bc7.png"
         },
@@ -70,7 +70,7 @@
           "mapping_method": "stable_border_rgba_ssd",
           "coverage": "",
           "boundary": "",
-          "match_rmse": 3.534168605445081,
+          "match_rmse": 3.534290250096846,
           "source_png": "packages\\0x629A127B\\png\\g00_00003_64x64_bc7.png",
           "replacement_path": "combat_portrait\\0x629A127B\\g00\\g00_00003_64x64_bc7.png"
         }
@@ -86,7 +86,7 @@
       "anchor": {
         "x": 359,
         "y": 142,
-        "rmse": 14.54231971739645,
+        "rmse": 14.542055811153537,
         "full_rmse": 47.796396599501094,
         "stable_border_pixels": 3018.7724609375,
         "method": "stable_border_rgba_ssd"
@@ -109,7 +109,7 @@
           "mapping_method": "stable_border_rgba_ssd",
           "coverage": "",
           "boundary": "",
-          "match_rmse": 14.54231971739645,
+          "match_rmse": 14.542055811153537,
           "source_png": "packages\\0x629A127B\\png\\g00_00004_92x84_bc7.png",
           "replacement_path": "combat_portrait\\0x629A127B\\g00\\g00_00004_92x84_bc7.png"
         },
@@ -129,7 +129,7 @@
           "mapping_method": "stable_border_rgba_ssd",
           "coverage": "",
           "boundary": "",
-          "match_rmse": 14.54231971739645,
+          "match_rmse": 14.542055811153537,
           "source_png": "packages\\0x629A127B\\png\\g00_00005_92x84_bc7.png",
           "replacement_path": "combat_portrait\\0x629A127B\\g00\\g00_00005_92x84_bc7.png"
         }
