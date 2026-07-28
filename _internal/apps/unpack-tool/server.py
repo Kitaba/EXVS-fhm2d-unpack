@@ -18,8 +18,6 @@ from urllib.parse import urlparse
 
 
 ACTION_LABELS = {
-    "quick": "VSAC29 快速准备",
-    "install": "安装内置 VSAC29 映射",
     "scan": "扫描 FHM2D",
     "extract": "提取并转换 PNG",
     "color": "修复 PNG 显示颜色",
@@ -61,25 +59,6 @@ class JobManager:
             "log_file": None,
         }
         self.lines = deque(maxlen=500)
-        self.prebuilt_database = self.read_prebuilt_database()
-
-    def read_prebuilt_database(self):
-        database_root = self.core_root / "databases"
-        manifests = []
-        for path in sorted(database_root.glob("*/database.json")):
-            try:
-                manifest = json.loads(path.read_text(encoding="utf-8"))
-                manifests.append(
-                    {
-                        "game_version": manifest.get("game_version", "未知"),
-                        "texture_count": int(manifest.get("texture_count", 0)),
-                        "group_count": int(manifest.get("group_count", 0)),
-                        "layer_count": int(manifest.get("layer_count", 0)),
-                    }
-                )
-            except (OSError, ValueError, TypeError):
-                continue
-        return manifests
 
     def command(self, stage):
         batch = self.core_root / "fhm2d_batch_textures.py"
@@ -110,34 +89,13 @@ class JobManager:
             "validate": [*common, "validate"],
             "map": [
                 sys.executable,
-                str(self.core_root / "mapping_database.py"),
-                "apply",
-                "--catalog",
-                str(self.texture_root / "inventory" / "textures.csv"),
+                str(mapper),
+                "build",
                 "--texture-root",
                 str(self.texture_root),
-                "--database-root",
-                str(self.core_root / "databases"),
                 "--output",
                 str(self.mapping_root),
-                "--mapper",
-                str(mapper),
-            ],
-            "install": [
-                sys.executable,
-                str(self.core_root / "mapping_database.py"),
-                "apply",
-                "--catalog",
-                str(self.texture_root / "inventory" / "textures.csv"),
-                "--texture-root",
-                str(self.texture_root),
-                "--database-root",
-                str(self.core_root / "databases"),
-                "--output",
-                str(self.mapping_root),
-                "--mapper",
-                str(mapper),
-                "--require-database",
+                "--force",
             ],
             "map_validate": [
                 sys.executable,
@@ -160,8 +118,6 @@ class JobManager:
 
     @staticmethod
     def stages(action):
-        if action == "quick":
-            return ["scan", "extract", "color", "install", "map_validate"]
         if action == "full":
             return [
                 "scan",
@@ -175,8 +131,6 @@ class JobManager:
             ]
         if action == "map":
             return ["map", "map_validate"]
-        if action == "install":
-            return ["install", "map_validate"]
         return [action]
 
     def append(self, line, log_stream=None):
@@ -373,7 +327,6 @@ class JobManager:
                 "mapped_group_count": group_count,
                 "mapping_source": mapping_source,
                 "mapping_game_version": mapping_game_version,
-                "prebuilt_databases": self.prebuilt_database,
                 "free_gib": round(usage.free / 1024**3, 2),
                 "log_lines": lines,
             }

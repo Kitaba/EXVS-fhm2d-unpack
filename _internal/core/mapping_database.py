@@ -383,7 +383,7 @@ def apply_command(args):
         raise ValueError(
             "No matching prebuilt mapping database. Pixel-only texture "
             "changes are allowed, but the package/group/index/dimension/"
-            "format layout must match a supported VSAC29 catalog. Finish "
+            "format layout must match a supported catalog. Finish "
             "the scan and PNG extraction first "
             f"(textures={signatures['texture_count']}, "
             f"layout={signatures['layout']}, "

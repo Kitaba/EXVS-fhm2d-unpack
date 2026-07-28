@@ -55,32 +55,6 @@
           <span class="safe-label">只读原始 FHM2D</span>
         </div>
 
-        <div class="version-guide">
-          <div>
-            <span class="version-badge">VSAC29 内置映射</span>
-            <strong id="databaseState">正在读取内置数据库</strong>
-          </div>
-          <p>内置的是人物分类、图层坐标和组合关系，不包含游戏图片。首次使用仍需提取 PNG，但不必重新分析人物映射，也不必执行完整验证。</p>
-        </div>
-
-        <div class="quick-actions">
-          <button class="quick-primary" data-action="quick">
-            <span class="step-number">推荐</span>
-            <span>
-              <strong>VSAC29 快速准备</strong>
-              <small>扫描、断点提取、自动建目录、安装内置映射</small>
-            </span>
-            <b>开始</b>
-          </button>
-          <button class="quick-secondary" data-action="install">
-            <span>
-              <strong>仅安装内置映射</strong>
-              <small>已有完整 PNG 和 textures.csv 时使用，通常只需数秒</small>
-            </span>
-            <b>安装</b>
-          </button>
-        </div>
-
         <button class="primary-operation full-operation" data-action="full">
           <span class="step-number">01—07</span>
           <span>
@@ -118,8 +92,8 @@
           </button>
           <button data-action="map">
             <span class="step-number">05</span>
-            <strong>兼容模式映射</strong>
-            <small>内置版本不匹配时自动重新分析</small>
+            <strong>生成人物映射</strong>
+            <small>根据当前提取结果重新分析人物与图层组合</small>
           </button>
           <button data-action="replan">
             <span class="step-number">06</span>
@@ -130,10 +104,10 @@
 
         <div class="notes">
           <strong>如何选择</strong>
-          <p>新的 VSAC29 工作区：选择“VSAC29 快速准备”。已有完整提取结果：选择“仅安装内置映射”。映射数量已经显示为 1,297 时，可直接关闭本页并启动立绘查看器。</p>
+          <p>新的工作区请选择“一键建立完整立绘库”。已经完成扫描、提取和目录生成时，可以单独执行后续阶段；人物映射需要根据当前提取结果重新分析。</p>
           <p>已有旧版平铺提取结果时，可单独执行“自动重规划”；它只移动现有包并更新清单与映射路径，不会重新扫描、解包或转换 PNG。</p>
           <p>旧版工具提取的 PNG 若在 Windows“照片”或图像编辑软件中显得发白，请执行一次“修复显示颜色”。该操作只把错误的线性 Gamma 标记改为标准 sRGB，不调整 RGBA 数值，不影响回包。</p>
-          <p>图片提取仍需要较长时间，并占用约 5 GiB 或更多磁盘空间；可中止后再次点击快速准备继续。</p>
+          <p>图片提取和人物映射需要较长时间，并占用约 5 GiB 或更多磁盘空间；扫描与图片提取支持在中止后继续执行。</p>
           <p>输出仅写入工具包的“工作区”，不会覆盖游戏目录中的原始文件。</p>
         </div>
       </section>

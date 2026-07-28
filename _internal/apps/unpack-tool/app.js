@@ -7,7 +7,6 @@ const els = {
   mappingCount: document.querySelector("#mappingCount"),
   freeSpace: document.querySelector("#freeSpace"),
   workspacePath: document.querySelector("#workspacePath"),
-  databaseState: document.querySelector("#databaseState"),
   taskTitle: document.querySelector("#taskTitle"),
   cancelButton: document.querySelector("#cancelButton"),
   progressBar: document.querySelector("#progressBar"),
@@ -56,12 +55,6 @@ function render(data) {
   els.supportedCount.textContent = `${data.supported_package_count.toLocaleString()} 个纹理包`;
   els.textureCount.textContent = data.texture_count.toLocaleString();
   els.mappingCount.textContent = data.mapped_group_count.toLocaleString();
-  const database = data.prebuilt_databases?.find(
-    (item) => item.game_version.toLowerCase() === "vsac29",
-  ) || data.prebuilt_databases?.[0];
-  els.databaseState.textContent = database
-    ? `${database.game_version.toUpperCase()} · ${database.group_count.toLocaleString()} 组人物 · ${database.layer_count.toLocaleString()} 图层`
-    : "未检测到内置映射数据库";
   els.freeSpace.textContent = `${data.free_gib} GiB`;
   els.workspacePath.textContent = data.workspace;
   els.workspacePath.title = data.workspace;
