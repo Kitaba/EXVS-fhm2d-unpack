@@ -11,7 +11,10 @@ from pathlib import Path
 from fhm2d_unpack import iter_deflate_blocks, read_header
 
 
-TEXTURE_NAME_PREFIX = b"46XTimg-"
+TEXTURE_NAME_PREFIX = b"46XT"
+TEXTURE_NAME_PATTERN = re.compile(
+    r"(?:46XTimg-(?P<img_index>\d+)|46XT[!-~]+)"
+)
 TEXTURE_METADATA_SIZE = 0xB0
 TEXTURE_NAME_OFFSET = 0x40
 TEXTURE_WIDTH_OFFSET = 0x84
@@ -209,14 +212,19 @@ def scan_textures(payload, supported_formats=None):
         ):
             continue
 
-        name_bytes = payload[name_offset : name_offset + 0x20].split(b"\0", 1)[0]
+        name_bytes = payload[name_offset : name_offset + 0x40].split(b"\0", 1)[0]
         try:
             embedded_name = name_bytes.decode("ascii")
         except UnicodeDecodeError:
             continue
-        name_match = re.fullmatch(r"46XTimg-(\d+)", embedded_name)
+        name_match = TEXTURE_NAME_PATTERN.fullmatch(embedded_name)
         if not name_match:
             continue
+        embedded_index = (
+            int(name_match.group("img_index"))
+            if name_match.group("img_index") is not None
+            else len(textures)
+        )
 
         data_size = u32(payload, metadata_offset)
         width = u32(payload, metadata_offset + TEXTURE_WIDTH_OFFSET)
@@ -234,13 +242,18 @@ def scan_textures(payload, supported_formats=None):
         marker = u32(payload, metadata_offset + TEXTURE_MARKER_OFFSET)
         data_offset = metadata_offset - data_size
 
+        # Other resource types also use 46XT names. Confirm the texture
+        # record signature before applying strict texture validation.
+        if (
+            marker != TEXTURE_MARKER
+            or data_offset < 0
+            or data_size != data_size_copy
+            or width == 0
+            or height == 0
+        ):
+            continue
+
         problems = []
-        if data_offset < 0:
-            problems.append("negative data offset")
-        if data_size != data_size_copy:
-            problems.append("data size fields differ")
-        if width == 0 or height == 0:
-            problems.append("zero dimensions")
         if mip_count != 1:
             problems.append(f"unsupported mip count {mip_count}")
         if array_size != 1 or depth != 1:
@@ -250,8 +263,6 @@ def scan_textures(payload, supported_formats=None):
             problems.append(f"unsupported format 0x{format_code:X}")
         if block_dimension != BC7_BLOCK_DIMENSION:
             problems.append(f"unexpected block dimension {block_dimension}")
-        if marker != TEXTURE_MARKER:
-            problems.append(f"unexpected marker 0x{marker:X}")
         expected_size = (
             format_info["size"](width, height) if format_info is not None else None
         )
@@ -270,7 +281,7 @@ def scan_textures(payload, supported_formats=None):
             {
                 "texture_index": len(textures),
                 "embedded_name": embedded_name,
-                "embedded_index": int(name_match.group(1)),
+                "embedded_index": embedded_index,
                 "payload_data_offset": data_offset,
                 "payload_metadata_offset": metadata_offset,
                 "data_size": data_size,
@@ -287,7 +298,7 @@ def scan_textures(payload, supported_formats=None):
         )
 
     if not textures:
-        raise ValueError("no supported 46XTimg textures found")
+        raise ValueError("no supported 46XT texture records found")
     return textures
 
 
@@ -420,7 +431,7 @@ def extract_file(
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description=(
-            "Extract all supported 46XTimg textures from EXVSIB fhm2d files "
+            "Extract all supported 46XT textures from EXVSIB fhm2d files "
             "as reproducible DX10 BC7 DDS files."
         )
     )

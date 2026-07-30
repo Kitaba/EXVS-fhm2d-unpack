@@ -18,6 +18,7 @@ from fhm2d_extract_textures import (
     extract_file,
     parse_group_labels,
     scan_textures,
+    TEXTURE_NAME_PREFIX,
 )
 from png_color_profile import png_color_metadata, retag_png_srgb
 from texture_layout import PACKAGE_CATEGORIES
@@ -126,7 +127,7 @@ def scan_one(path, detail_dir):
     }
     try:
         _, _, payload, trailing = decode_payload(path, strict=False)
-        if b"46XTimg-" not in payload:
+        if TEXTURE_NAME_PREFIX not in payload:
             row["status"] = "no_supported_textures"
         else:
             labels = parse_group_labels(trailing)
@@ -692,7 +693,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description=(
             "Resumable inventory, extraction, cataloging, and PNG conversion "
-            "for supported EXVSIB 46XTimg BC7 and RGBA8 resources."
+            "for supported EXVSIB 46XT BC7 and RGBA8 resources."
         )
     )
     parser.add_argument(
