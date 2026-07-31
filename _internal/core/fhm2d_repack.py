@@ -192,7 +192,9 @@ def bulk_table_layout(index_data, table_offset, block_count,
     raise ValueError("bulk table offset fields are not recognized")
 
 
-def partition_bulk_tables(index_data, blocks, data_base):
+def partition_bulk_tables(
+    index_data, blocks, data_base, allow_implicit_boundaries=False
+):
     """Split a no-catalog block run into its actual size-table records."""
     partitions = []
     position = 0
@@ -218,7 +220,18 @@ def partition_bulk_tables(index_data, blocks, data_base):
                         expected_end,
                     )
                 except ValueError:
-                    continue
+                    if not (
+                        allow_implicit_boundaries
+                        and position == 0
+                        and end == len(blocks)
+                        and expected_start == 0
+                    ):
+                        continue
+                    # Single-resource containers can store one size table for
+                    # the complete payload stream without redundant start/end
+                    # offsets. The deflate streams remain sequential, so only
+                    # their encoded sizes need updating.
+                    layout = (None, None)
                 candidates.append(
                     (end, table_offset, layout, candidate_blocks)
                 )
@@ -316,7 +329,12 @@ def rebuild_container(container, payload):
         ]
         original_data_base = container["payload_blocks"][0]["file_offset"]
         for bulk_blocks, table_offset, layout in partition_bulk_tables(
-            container["index_data"], no_catalog_blocks, original_data_base
+            container["index_data"],
+            no_catalog_blocks,
+            original_data_base,
+            allow_implicit_boundaries=(
+                len(no_catalog_blocks) == len(container["payload_blocks"])
+            ),
         ):
             start_offset, end_offset = layout
             first_index = bulk_blocks[0]["index"]
@@ -327,7 +345,10 @@ def rebuild_container(container, payload):
                 updates_by_index[index]["compressed_size"]
                 for index in range(first_index, last_index + 1)
             )
-            struct.pack_into("<I", index_data, start_offset, relative_start)
+            if start_offset is not None:
+                struct.pack_into(
+                    "<I", index_data, start_offset, relative_start
+                )
             for table_index, block_index in enumerate(
                 range(first_index, last_index + 1)
             ):
@@ -482,6 +503,10 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
             original_container["index_data"],
             no_catalog_blocks,
             original_data_base,
+            allow_implicit_boundaries=(
+                len(no_catalog_blocks)
+                == len(original_container["payload_blocks"])
+            ),
         ):
             start_offset, end_offset = layout
             first_index = original_bulk[0]["index"]
@@ -492,7 +517,11 @@ def verify_rebuilt(original_container, rebuilt, expected_payload):
                 - data_base
                 + rebuilt_by_index[last_index]["compressed_size"]
             )
-            if struct.unpack_from("<I", index_data, start_offset)[0] != relative_start:
+            if (
+                start_offset is not None
+                and struct.unpack_from("<I", index_data, start_offset)[0]
+                != relative_start
+            ):
                 raise ValueError(
                     f"bulk run {first_index}..{last_index} start offset is incorrect"
                 )

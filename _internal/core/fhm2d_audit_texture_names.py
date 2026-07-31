@@ -2,6 +2,8 @@
 import argparse
 import collections
 import json
+import multiprocessing as mp
+import os
 import re
 import struct
 from pathlib import Path
@@ -76,6 +78,51 @@ def family(name):
     return match.group(1) if match else name
 
 
+def inspect_file(path):
+    families = collections.Counter()
+    valid_families = collections.Counter()
+    unrecognized_valid = collections.defaultdict(list)
+    invalid_examples = collections.defaultdict(list)
+    error = None
+    try:
+        _, _, payload, _ = decode_payload(path, strict=False)
+        seen_offsets = set()
+        for match in PRINTABLE_NAME.finditer(payload):
+            if match.start() in seen_offsets:
+                continue
+            seen_offsets.add(match.start())
+            raw_name = match.group(0).split(b"\0", 1)[0]
+            try:
+                name = raw_name.decode("ascii")
+            except UnicodeDecodeError:
+                continue
+            item = inspect_candidate(payload, match.start(), name)
+            name_family = family(name)
+            families[name_family] += 1
+            if item["metadata_valid"]:
+                valid_families[name_family] += 1
+                if not item["recognized"]:
+                    unrecognized_valid[name_family].append(
+                        {"package": path.name, **item}
+                    )
+            else:
+                invalid_examples[name_family].append(
+                    {"package": path.name, **item}
+                )
+    except Exception as exc:
+        error = {
+            "package": path.name,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    return {
+        "families": dict(families),
+        "valid_families": dict(valid_families),
+        "unrecognized_valid": dict(unrecognized_valid),
+        "invalid_examples": dict(invalid_examples),
+        "error": error,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Audit 46XT texture record naming across FHM2D packages."
@@ -84,6 +131,12 @@ def main():
     parser.add_argument("--pattern", default="*.fhm2d")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--checkpoint", type=int, default=100)
+    parser.add_argument(
+        "-j",
+        "--jobs",
+        type=int,
+        default=max(1, (os.cpu_count() or 4) // 2),
+    )
     args = parser.parse_args()
 
     files = sorted(args.source.glob(args.pattern))
@@ -93,44 +146,25 @@ def main():
     invalid_examples = collections.defaultdict(list)
     errors = []
 
-    for file_index, path in enumerate(files, 1):
-        try:
-            _, _, payload, _ = decode_payload(path, strict=False)
-            seen_offsets = set()
-            for match in PRINTABLE_NAME.finditer(payload):
-                if match.start() in seen_offsets:
-                    continue
-                seen_offsets.add(match.start())
-                raw_name = match.group(0).split(b"\0", 1)[0]
-                try:
-                    name = raw_name.decode("ascii")
-                except UnicodeDecodeError:
-                    continue
-                item = inspect_candidate(payload, match.start(), name)
-                name_family = family(name)
-                families[name_family] += 1
-                if item["metadata_valid"]:
-                    valid_families[name_family] += 1
-                    if not item["recognized"] and len(
-                        unrecognized_valid[name_family]
-                    ) < 20:
-                        unrecognized_valid[name_family].append(
-                            {"package": path.name, **item}
-                        )
-                elif len(invalid_examples[name_family]) < 3:
-                    invalid_examples[name_family].append(
-                        {"package": path.name, **item}
-                    )
-        except Exception as exc:
-            if len(errors) < 100:
-                errors.append(
-                    {
-                        "package": path.name,
-                        "error": f"{type(exc).__name__}: {exc}",
-                    }
-                )
-        if file_index % args.checkpoint == 0 or file_index == len(files):
-            print(f"progress={file_index}/{len(files)}", flush=True)
+    context = mp.get_context("spawn")
+    with context.Pool(args.jobs) as pool:
+        for file_index, result in enumerate(
+            pool.imap_unordered(inspect_file, files, chunksize=1), 1
+        ):
+            families.update(result["families"])
+            valid_families.update(result["valid_families"])
+            for name_family, rows in result["unrecognized_valid"].items():
+                remaining = 20 - len(unrecognized_valid[name_family])
+                if remaining > 0:
+                    unrecognized_valid[name_family].extend(rows[:remaining])
+            for name_family, rows in result["invalid_examples"].items():
+                remaining = 3 - len(invalid_examples[name_family])
+                if remaining > 0:
+                    invalid_examples[name_family].extend(rows[:remaining])
+            if result["error"] and len(errors) < 100:
+                errors.append(result["error"])
+            if file_index % args.checkpoint == 0 or file_index == len(files):
+                print(f"progress={file_index}/{len(files)}", flush=True)
 
     report = {
         "files": len(files),
@@ -150,4 +184,5 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.freeze_support()
     main()

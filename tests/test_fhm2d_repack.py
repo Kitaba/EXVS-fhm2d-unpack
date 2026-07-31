@@ -9,7 +9,43 @@ from pathlib import Path
 CORE_DIR = Path(__file__).resolve().parents[1] / "_internal" / "core"
 sys.path.insert(0, str(CORE_DIR))
 
-from fhm2d_repack import decode_container, find_trailing_offset_references
+from fhm2d_repack import (
+    decode_container,
+    find_trailing_offset_references,
+    partition_bulk_tables,
+)
+
+
+class ImplicitBulkTableTests(unittest.TestCase):
+    def test_accepts_unique_full_payload_size_table_without_boundaries(self):
+        index_data = bytearray(b"\xAA" * 0x100)
+        table_offset = 0x40
+        blocks = [
+            {"index": 1, "file_offset": 0x1000, "compressed_size": 10},
+            {"index": 2, "file_offset": 0x100A, "compressed_size": 20},
+        ]
+        for index, block in enumerate(blocks):
+            struct.pack_into(
+                "<H",
+                index_data,
+                table_offset + 8 * index,
+                block["compressed_size"],
+            )
+
+        with self.assertRaisesRegex(
+            ValueError, "could not identify one bulk table"
+        ):
+            partition_bulk_tables(index_data, blocks, data_base=0x1000)
+
+        partitions = partition_bulk_tables(
+            index_data,
+            blocks,
+            data_base=0x1000,
+            allow_implicit_boundaries=True,
+        )
+        self.assertEqual(len(partitions), 1)
+        self.assertEqual(partitions[0][1], table_offset)
+        self.assertEqual(partitions[0][2], (None, None))
 
 
 class TrailingOffsetReferenceTests(unittest.TestCase):

@@ -206,6 +206,9 @@ def export_project(input_path, output_root, texconv, force=False):
     )
     project = {
         "workflow_version": 1,
+        "texture_scanner_version": extract_report[
+            "texture_scanner_version"
+        ],
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "source": str(input_path.resolve()),
         "source_name": input_path.name,
@@ -369,7 +372,7 @@ def convert_changed_pngs(texconv, project_dir, changed_rows, dds_dir):
         dds_path = dds_dir / png_path.with_suffix(".dds").name
         if not dds_path.is_file():
             raise ValueError(f"texconv did not create {dds_path}")
-        dds = parse_dds(dds_path)
+        dds = parse_dds(dds_path, allowed_formats={expected_dxgi})
         if dds["width"] != row["width"] or dds["height"] != row["height"]:
             raise ValueError(
                 f"encoded DDS dimensions changed for {row['png_file']}"
@@ -449,8 +452,8 @@ def build_project(project_dir, output_path, texconv, force=False):
                 "data_size": expected_size,
                 "original_png_sha256": status["original_sha256"],
                 "modified_png_sha256": status["current_sha256"],
-                "original_bc7_sha256": original_pixel_hash,
-                "modified_bc7_sha256": hashlib.sha256(top_mip).hexdigest(),
+                "original_pixel_sha256": original_pixel_hash,
+                "modified_pixel_sha256": hashlib.sha256(top_mip).hexdigest(),
                 "encoded_dds": str(item["path"].relative_to(project_dir)),
                 "normalized_transparent_pixels": item[
                     "normalized_transparent_pixels"
@@ -477,8 +480,8 @@ def build_project(project_dir, output_path, texconv, force=False):
             "version": texconv_version(texconv),
             "sha256": sha256_file(texconv),
             "encoding": (
-                "BC7_UNORM, one mip, DX10 header, CPU, single process, "
-                "high-quality BC7 compression"
+                "Source texture format, one mip, DX10 header, CPU, "
+                "single process"
             ),
         },
     }

@@ -9,6 +9,7 @@ sys.path.insert(0, str(CORE_DIR))
 
 from fhm2d_extract_textures import (
     FHM2D_RGBA8_FORMAT,
+    NoSupportedTexturesError,
     TEXTURE_BLOCK_DIMENSION_OFFSET,
     TEXTURE_DATA_SIZE_COPY_OFFSET,
     TEXTURE_DEPTH_OFFSET,
@@ -97,12 +98,34 @@ class StickerTextureTests(unittest.TestCase):
         self.assertEqual(textures[0]["embedded_name"], name)
         self.assertEqual(textures[0]["embedded_index"], 0)
 
+    def test_scans_discovered_ms_and_vs_texture_names(self):
+        for name in (
+            "46XTms_ms_l_018_008_001",
+            "46XTvs_s_l_207_01",
+        ):
+            with self.subTest(name=name):
+                textures = scan_textures(
+                    bytes(self.make_rgba8_payload(name)),
+                    supported_formats={FHM2D_RGBA8_FORMAT},
+                )
+                self.assertEqual(len(textures), 1)
+                self.assertEqual(textures[0]["embedded_name"], name)
+
+    def test_preserves_numeric_index_for_legacy_img_names(self):
+        textures = scan_textures(
+            bytes(self.make_rgba8_payload("46XTimg-00123")),
+            supported_formats={FHM2D_RGBA8_FORMAT},
+        )
+
+        self.assertEqual(textures[0]["embedded_index"], 123)
+
     def test_ignores_non_texture_46xt_resource_name(self):
         payload = bytearray(0x200)
         payload[0x80:0x8F] = b"46XTnot_texture"
 
         with self.assertRaisesRegex(
-            ValueError, "no supported 46XT texture records found"
+            NoSupportedTexturesError,
+            "no supported 46XT texture records found",
         ):
             scan_textures(
                 bytes(payload), supported_formats={FHM2D_RGBA8_FORMAT}

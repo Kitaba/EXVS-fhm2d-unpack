@@ -15,6 +15,7 @@ TEXTURE_NAME_PREFIX = b"46XT"
 TEXTURE_NAME_PATTERN = re.compile(
     r"(?:46XTimg-(?P<img_index>\d+)|46XT[!-~]+)"
 )
+TEXTURE_SCANNER_VERSION = 2
 TEXTURE_METADATA_SIZE = 0xB0
 TEXTURE_NAME_OFFSET = 0x40
 TEXTURE_WIDTH_OFFSET = 0x84
@@ -34,6 +35,10 @@ DXGI_FORMAT_R8G8B8A8_UNORM = 28
 DXGI_FORMAT_BC7_UNORM = 98
 BC7_BLOCK_SIZE = 16
 BC7_BLOCK_DIMENSION = 4
+
+
+class NoSupportedTexturesError(ValueError):
+    """The payload contains no structurally valid supported 46XT textures."""
 
 
 def u32(data, offset):
@@ -298,7 +303,9 @@ def scan_textures(payload, supported_formats=None):
         )
 
     if not textures:
-        raise ValueError("no supported 46XT texture records found")
+        raise NoSupportedTexturesError(
+            "no supported 46XT texture records found"
+        )
     return textures
 
 
@@ -400,6 +407,7 @@ def extract_file(
         )
 
     report = {
+        "texture_scanner_version": TEXTURE_SCANNER_VERSION,
         "source": str(input_path),
         "source_size": len(blob),
         "source_sha256": hashlib.sha256(blob).hexdigest(),

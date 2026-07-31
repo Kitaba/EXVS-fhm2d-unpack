@@ -13,6 +13,8 @@ from pathlib import Path
 from fhm2d_extract_textures import (
     FHM2D_BC7_FORMAT,
     FHM2D_RGBA8_FORMAT,
+    NoSupportedTexturesError,
+    TEXTURE_SCANNER_VERSION,
     assign_groups,
     decode_payload,
     extract_file,
@@ -27,6 +29,7 @@ SUPPORTED_BATCH_FORMATS = {FHM2D_BC7_FORMAT, FHM2D_RGBA8_FORMAT}
 
 
 PACKAGE_FIELDS = [
+    "texture_scanner_version",
     "source",
     "name",
     "size",
@@ -73,6 +76,20 @@ def read_inventory(path):
         return list(csv.DictReader(stream))
 
 
+def inventory_row_is_current(row, stat):
+    if not row:
+        return False
+    try:
+        return (
+            int(row.get("texture_scanner_version", 0))
+            == TEXTURE_SCANNER_VERSION
+            and int(row["size"]) == stat.st_size
+            and int(row["mtime_ns"]) == stat.st_mtime_ns
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
 def package_directories(package_root):
     found = {}
     if not package_root.is_dir():
@@ -111,6 +128,7 @@ def scan_one(path, detail_dir):
     started = time.perf_counter()
     stat = path.stat()
     row = {
+        "texture_scanner_version": TEXTURE_SCANNER_VERSION,
         "source": str(path.resolve()),
         "name": path.name,
         "size": stat.st_size,
@@ -131,37 +149,46 @@ def scan_one(path, detail_dir):
             row["status"] = "no_supported_textures"
         else:
             labels = parse_group_labels(trailing)
-            textures = scan_textures(
-                payload, supported_formats=SUPPORTED_BATCH_FORMATS
-            )
-            assign_groups(textures, labels)
-            row.update(
-                {
-                    "status": "supported_textures",
-                    "texture_count": len(textures),
-                    "group_count": max(
-                        texture["group_index"] for texture in textures
-                    )
-                    + 1,
-                    "group_labels": " ".join(labels),
-                    "texture_data_bytes": sum(
-                        texture["data_size"] for texture in textures
-                    ),
-                    "max_width": max(texture["width"] for texture in textures),
-                    "max_height": max(texture["height"] for texture in textures),
+            try:
+                textures = scan_textures(
+                    payload, supported_formats=SUPPORTED_BATCH_FORMATS
+                )
+            except NoSupportedTexturesError:
+                row["status"] = "no_supported_textures"
+            else:
+                assign_groups(textures, labels)
+                row.update(
+                    {
+                        "status": "supported_textures",
+                        "texture_count": len(textures),
+                        "group_count": max(
+                            texture["group_index"] for texture in textures
+                        )
+                        + 1,
+                        "group_labels": " ".join(labels),
+                        "texture_data_bytes": sum(
+                            texture["data_size"] for texture in textures
+                        ),
+                        "max_width": max(
+                            texture["width"] for texture in textures
+                        ),
+                        "max_height": max(
+                            texture["height"] for texture in textures
+                        ),
+                    }
+                )
+                detail_dir.mkdir(parents=True, exist_ok=True)
+                detail = {
+                    "texture_scanner_version": TEXTURE_SCANNER_VERSION,
+                    "source": str(path.resolve()),
+                    "scanned_utc": utc_now(),
+                    "group_labels": labels,
+                    "textures": textures,
                 }
-            )
-            detail_dir.mkdir(parents=True, exist_ok=True)
-            detail = {
-                "source": str(path.resolve()),
-                "scanned_utc": utc_now(),
-                "group_labels": labels,
-                "textures": textures,
-            }
-            (detail_dir / f"{path.stem}.json").write_text(
-                json.dumps(detail, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+                (detail_dir / f"{path.stem}.json").write_text(
+                    json.dumps(detail, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
     except Exception as exc:
         row["status"] = "error"
         row["error"] = f"{type(exc).__name__}: {exc}"
@@ -184,12 +211,7 @@ def scan_command(args):
         resolved = str(path.resolve())
         stat = path.stat()
         old = existing.get(resolved.lower())
-        if (
-            not args.force
-            and old
-            and int(old["size"]) == stat.st_size
-            and int(old["mtime_ns"]) == stat.st_mtime_ns
-        ):
+        if not args.force and inventory_row_is_current(old, stat):
             skipped += 1
         else:
             rows_by_source[resolved.lower()] = scan_one(path, detail_dir)
@@ -215,6 +237,7 @@ def write_summary(output_root, rows):
     rows = list(rows)
     supported = [row for row in rows if row["status"] == "supported_textures"]
     summary = {
+        "texture_scanner_version": TEXTURE_SCANNER_VERSION,
         "updated_utc": utc_now(),
         "package_count": len(rows),
         "supported_package_count": len(supported),
@@ -237,6 +260,22 @@ def write_summary(output_root, rows):
 def available_space(path):
     path.mkdir(parents=True, exist_ok=True)
     return shutil.disk_usage(path).free
+
+
+def extraction_manifest_is_current(manifest, row):
+    if not manifest.is_file():
+        return False, None
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        current = (
+            int(data.get("texture_scanner_version", 0))
+            == TEXTURE_SCANNER_VERSION
+            and int(data.get("texture_count", -1))
+            == int(row["texture_count"])
+        )
+        return current, data
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return False, None
 
 
 def compact_package(
@@ -320,12 +359,14 @@ def extract_command(args):
         package_dir = find_package_directory(package_root, source.stem)
         manifest = package_dir / "extract_manifest.json"
         resume_compact = False
-        if manifest.is_file() and args.compact and not args.force:
-            manifest_data = json.loads(manifest.read_text(encoding="utf-8"))
+        manifest_current, manifest_data = extraction_manifest_is_current(
+            manifest, row
+        )
+        if manifest_current and args.compact and not args.force:
             resume_compact = (
                 manifest_data.get("batch_storage") == "compact_pending"
             )
-        if manifest.is_file() and not args.force and not resume_compact:
+        if manifest_current and not args.force and not resume_compact:
             status = "skipped_existing"
             error = ""
         else:

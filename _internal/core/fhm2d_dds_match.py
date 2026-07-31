@@ -10,11 +10,12 @@ from pathlib import Path
 DDS_MAGIC = b"DDS "
 DX10_FOURCC = b"DX10"
 BC7_FORMATS = {97, 98, 99}
+RGBA8_FORMATS = {27, 28, 29}
 BC7_BLOCK_SIZE = 16
 ZERO_BLOCK = b"\0" * BC7_BLOCK_SIZE
 
 
-def parse_dds(path):
+def parse_dds(path, allowed_formats=BC7_FORMATS):
     data = path.read_bytes()
     if len(data) < 128 or data[:4] != DDS_MAGIC:
         raise ValueError(f"{path} is not a DDS file")
@@ -26,18 +27,30 @@ def parse_dds(path):
     mip_count = max(1, int.from_bytes(data[28:32], "little"))
     fourcc = data[84:88]
     if fourcc != DX10_FOURCC:
-        raise ValueError(f"{path} is not a DX10 BC7 DDS")
+        raise ValueError(f"{path} is not a DX10 DDS")
     if len(data) < 148:
         raise ValueError(f"{path} has a truncated DX10 header")
 
     dxgi_format = int.from_bytes(data[128:132], "little")
     array_size = int.from_bytes(data[140:144], "little")
-    if dxgi_format not in BC7_FORMATS:
+    if allowed_formats is not None and dxgi_format not in allowed_formats:
+        expected = "/".join(str(item) for item in sorted(allowed_formats))
         raise ValueError(
-            f"{path} uses DXGI format {dxgi_format}, expected BC7 (97/98/99)"
+            f"{path} uses DXGI format {dxgi_format}, expected {expected}"
         )
 
-    top_mip_size = ((width + 3) // 4) * ((height + 3) // 4) * BC7_BLOCK_SIZE
+    if dxgi_format in BC7_FORMATS:
+        top_mip_size = (
+            ((width + 3) // 4)
+            * ((height + 3) // 4)
+            * BC7_BLOCK_SIZE
+        )
+    elif dxgi_format in RGBA8_FORMATS:
+        top_mip_size = width * height * 4
+    else:
+        raise ValueError(
+            f"{path} uses unsupported DXGI format {dxgi_format}"
+        )
     pixel_offset = 148
     if pixel_offset + top_mip_size > len(data):
         raise ValueError(f"{path} does not contain a complete top mip")
