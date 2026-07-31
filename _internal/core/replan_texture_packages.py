@@ -17,11 +17,7 @@ from texture_layout import (
 )
 
 
-MAPPED_CATEGORIES = {
-    "outgame_navigator",
-    "ingame_navigator",
-    "combat_portrait",
-}
+MAPPED_CATEGORIES = set(PACKAGE_CATEGORIES) - {DEFAULT_PACKAGE_CATEGORY}
 
 
 def read_csv(path):
@@ -62,50 +58,51 @@ def classify(package, categories):
 
 def discover_packages(package_root, categories):
     package_to_category = {}
-    flat_packages = []
+    package_locations = {}
     for category in PACKAGE_CATEGORIES:
         category_root = package_root / category
         if not category_root.is_dir():
             continue
         for path in sorted(item for item in category_root.iterdir() if item.is_dir()):
-            if path.name in package_to_category:
+            if path.name in package_locations:
                 raise ValueError(f"duplicate categorized package: {path.name}")
-            package_to_category[path.name] = category
+            package_locations[path.name] = (path, category)
     for path in sorted(item for item in package_root.iterdir() if item.is_dir()):
         if path.name in PACKAGE_CATEGORIES:
             continue
-        if path.name in package_to_category:
+        if path.name in package_locations:
             raise ValueError(
                 f"package exists both flat and categorized: {path.name}"
             )
-        package_to_category[path.name] = classify(path.name, categories)
-        flat_packages.append(path)
-    return package_to_category, flat_packages
+        package_locations[path.name] = (path, None)
+
+    moves = []
+    for package, (path, current_category) in package_locations.items():
+        desired_category = classify(package, categories)
+        package_to_category[package] = desired_category
+        if current_category != desired_category:
+            moves.append((path, desired_category))
+    return package_to_category, moves
 
 
 def rewrite_package_path(value, package, category):
     if not value:
         return value
     value = str(value)
-    prefixes = (
-        f"{PACKAGE_ROOT_NAME}\\{package}\\",
-        f"{PACKAGE_ROOT_NAME}/{package}/",
-    )
-    for prefix in prefixes:
-        if value.startswith(prefix):
-            separator = "\\" if "\\" in prefix else "/"
-            return (
-                f"{PACKAGE_ROOT_NAME}{separator}{category}"
-                f"{separator}{package}{separator}"
-                + value[len(prefix):]
-            )
-    marker = f"{PACKAGE_ROOT_NAME}\\{package}"
-    if marker in value:
-        return value.replace(
-            marker,
-            f"{PACKAGE_ROOT_NAME}\\{category}\\{package}",
-            1,
+    for separator in ("\\", "/"):
+        desired = (
+            f"{PACKAGE_ROOT_NAME}{separator}{category}"
+            f"{separator}{package}"
         )
+        sources = [f"{PACKAGE_ROOT_NAME}{separator}{package}"]
+        sources.extend(
+            f"{PACKAGE_ROOT_NAME}{separator}{old_category}"
+            f"{separator}{package}"
+            for old_category in PACKAGE_CATEGORIES
+        )
+        for source in sources:
+            if source in value:
+                return value.replace(source, desired, 1)
     return value
 
 
@@ -190,7 +187,7 @@ def main(argv=None):
         mapping_root = Path(args.mapping).resolve()
         package_root = all_textures / PACKAGE_ROOT_NAME
         categories = package_categories(mapping_root)
-        package_to_category, flat_packages = discover_packages(
+        package_to_category, moves = discover_packages(
             package_root, categories
         )
         counts = Counter(package_to_category.values())
@@ -198,7 +195,7 @@ def main(argv=None):
             json.dumps(
                 {
                     "packages": len(package_to_category),
-                    "unplanned_packages": len(flat_packages),
+                    "packages_to_move": len(moves),
                     "categories": counts,
                 },
                 default=dict,
@@ -215,8 +212,7 @@ def main(argv=None):
         backup_manifests(all_textures, mapping_root, backup_root)
         for category in PACKAGE_CATEGORIES:
             (package_root / category).mkdir(parents=True, exist_ok=True)
-        for source in flat_packages:
-            category = package_to_category[source.name]
+        for source, category in moves:
             target = package_root / category / source.name
             if target.exists():
                 raise FileExistsError(f"target already exists: {target}")
@@ -277,7 +273,7 @@ def main(argv=None):
             json.dumps(
                 {
                     "applied": True,
-                    "moved_packages": len(flat_packages),
+                    "moved_packages": len(moves),
                     "total_packages": len(package_to_category),
                     "categories": dict(sorted(counts.items())),
                     "changed": changed,

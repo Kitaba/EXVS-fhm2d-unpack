@@ -69,6 +69,12 @@ const els = {
 
 const roleLabels = {
   body: "人物主体",
+  awakening: "觉醒立绘",
+  favorite_mobile_suit: "刷卡喜好机体",
+  select_navigator: "选机界面领航员",
+  select_mobile_suit_thumbnail: "选机界面机体缩略图",
+  select_mobile_suit: "选机界面机体立绘",
+  match_mobile_suit: "匹配界面机体图",
   mouth: "嘴部",
   mouth_1: "嘴部 1",
   mouth_2: "嘴部 2",
@@ -326,12 +332,18 @@ function renderCategoryTabs() {
     "outgame_navigator",
     "ingame_navigator",
     "combat_portrait",
+    "awakening",
+    "favorite_mobile_suit",
+    "select_navigator",
+    "select_mobile_suit_thumbnail",
+    "select_mobile_suit",
+    "match_mobile_suit",
   ];
   els.categoryTabs.innerHTML = order.map((category) => `
     <button class="category-tab ${state.category === category ? "active" : ""}"
       data-category="${category}" role="tab">
       ${escapeHtml(state.meta.category_labels[category])}<br>
-      ${state.meta.category_counts[category]}
+      ${state.meta.category_counts[category] || 0}
     </button>
   `).join("");
 }
@@ -449,7 +461,7 @@ function renderInspector() {
   let html = `
     <section class="layer-section">
       <div class="layer-header">
-        <strong>人物主体</strong>
+        <strong>${escapeHtml(roleLabels[body.role] || body.role)}</strong>
         <span>1 个图层</span>
       </div>
       <div class="body-row">

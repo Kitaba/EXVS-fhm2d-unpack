@@ -20,6 +20,12 @@ CATEGORY_LABELS = {
     "outgame_navigator": "局外领航员",
     "ingame_navigator": "局内领航员",
     "combat_portrait": "战斗人员立绘",
+    "awakening": "觉醒立绘",
+    "favorite_mobile_suit": "刷卡喜好机体",
+    "select_navigator": "选机界面领航员",
+    "select_mobile_suit_thumbnail": "选机界面机体缩略图",
+    "select_mobile_suit": "选机界面机体立绘",
+    "match_mobile_suit": "匹配界面机体图",
 }
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 
@@ -139,7 +145,7 @@ class PortraitData:
                     "texture_id": texture_id,
                     "category": category,
                     "package": package,
-                    "group": group,
+                    "group": layer.get("source_group", group),
                     "embedded_index": int(layer["embedded_index"]),
                     "source_png": layer["source_png"],
                     "replacement_file": str(
@@ -158,7 +164,7 @@ class PortraitData:
         return {
             "app_id": "exvs_portrait_editor",
             "title": "EXVSIB 立绘编辑器",
-            "patch_api_version": 2,
+            "patch_api_version": 3,
             "workspace": str(self.mapping_root.parent),
             "mapping_version": self.mapping["mapping_version"],
             "group_count": self.mapping["group_count"],

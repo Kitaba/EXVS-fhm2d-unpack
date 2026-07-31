@@ -24,14 +24,14 @@ if errorlevel 1 (
   exit /b 2
 )
 
-powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:8766/api/status' -TimeoutSec 1; if([IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%')){ exit 0 } } catch {}; exit 1" >nul 2>nul
+powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:8766/api/status' -TimeoutSec 1; if($j.app_id -eq 'exvs_unpack_tool' -and [IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%') -and $j.ui_api_version -ge 2){ exit 0 } } catch {}; exit 1" >nul 2>nul
 if not errorlevel 1 (
   start "" "http://127.0.0.1:8766/"
   exit /b 0
 )
 
 for /L %%P in (17875,1,17884) do (
-  powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:%%P/api/status' -TimeoutSec 1; if($j.app_id -eq 'exvs_unpack_tool' -and [IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%')){ exit 0 } } catch {}; exit 1" >nul 2>nul
+  powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:%%P/api/status' -TimeoutSec 1; if($j.app_id -eq 'exvs_unpack_tool' -and [IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%') -and $j.ui_api_version -ge 2){ exit 0 } } catch {}; exit 1" >nul 2>nul
   if not errorlevel 1 (
     start "" "http://127.0.0.1:%%P/"
     exit /b 0

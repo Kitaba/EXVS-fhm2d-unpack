@@ -13,10 +13,11 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from texture_classification import classify_package_assets
 from texture_layout import PACKAGE_CATEGORIES, PACKAGE_ROOT_NAME
 
 
-MAPPING_VERSION = 1
+MAPPING_VERSION = 2
 PACKAGE_LAYOUT_VERSION = 1
 BODY_CATEGORIES = {
     (872, 960): "outgame_navigator",
@@ -43,6 +44,7 @@ LAYER_FIELDS = [
     "category",
     "package",
     "group",
+    "source_group",
     "texture_id",
     "role",
     "family",
@@ -341,15 +343,43 @@ def combat_match_family(body_image, overlay_images):
 
 
 def classify_groups(rows):
+    package_rows = defaultdict(list)
     groups = defaultdict(list)
     for row in rows:
         row = dict(row)
         row["group"] = row["group_label"]
+        package_rows[row["package"]].append(row)
         groups[(row["package"], row["group_label"])].append(row)
 
     classified = []
     exceptions = []
+    specially_classified = set()
+    for package, rows_for_package in sorted(package_rows.items()):
+        result = classify_package_assets(package, rows_for_package)
+        if result is None:
+            continue
+        specially_classified.add(package)
+        for row in result["rows"]:
+            classified.append(
+                {
+                    "category": result["category"],
+                    "package": package,
+                    "group": (
+                        f"{row['group_label']}_"
+                        f"{int(row['texture_index']):05d}"
+                    ),
+                    "source_group": row["group_label"],
+                    "body": row,
+                    "body_role": result["category"],
+                    "rows": [row],
+                    "presentation": "single_texture",
+                    "classification_method": result["method"],
+                }
+            )
+
     for (package, group), group_rows in sorted(groups.items()):
+        if package in specially_classified:
+            continue
         targets = defaultdict(list)
         for row in group_rows:
             dimensions = row_dimensions(row)
@@ -441,6 +471,7 @@ def layer_record(item, row, role, family, state_index, anchor, method):
         "category": item["category"],
         "package": item["package"],
         "group": item["group"],
+        "source_group": row["group_label"],
         "texture_id": texture_id(row),
         "role": role,
         "family": family,
@@ -577,7 +608,8 @@ def build_composition(item, texture_root):
 
     body_layer = {
         "texture_id": texture_id(body),
-        "role": "body",
+        "role": item.get("body_role", "body"),
+        "source_group": body["group_label"],
         "embedded_index": int(body["embedded_index"]),
         "width": int(body["width"]),
         "height": int(body["height"]),
@@ -616,6 +648,10 @@ def build_composition(item, texture_root):
         "category": item["category"],
         "package": item["package"],
         "group": item["group"],
+        "presentation": item.get("presentation", "composite"),
+        "classification_method": item.get(
+            "classification_method", "body_dimensions"
+        ),
         "canvas": {
             "width": int(body["width"]),
             "height": int(body["height"]),
@@ -712,12 +748,13 @@ def build_command(args):
                 / item["category"]
                 / f"{item['package']}_{item['group']}.png"
             )
-            preview = render_composition(
-                composition, texture_root, max_size=args.preview_size
-            )
             preview_path = output_root / preview_relative
-            preview_path.parent.mkdir(parents=True, exist_ok=True)
-            preview.save(preview_path, "PNG", optimize=False)
+            if composition["presentation"] != "single_texture":
+                preview = render_composition(
+                    composition, texture_root, max_size=args.preview_size
+                )
+                preview_path.parent.mkdir(parents=True, exist_ok=True)
+                preview.save(preview_path, "PNG", optimize=False)
             compositions.append(
                 {
                     "category": item["category"],
@@ -732,8 +769,9 @@ def build_command(args):
                     "category": item["category"],
                     "package": item["package"],
                     "group": item["group"],
+                    "source_group": body["group_label"],
                     "texture_id": texture_id(body),
-                    "role": "body",
+                    "role": item.get("body_role", "body"),
                     "family": "body",
                     "state_index": 0,
                     "embedded_index": int(body["embedded_index"]),
@@ -741,7 +779,9 @@ def build_command(args):
                     "height": int(body["height"]),
                     "anchor_x": 0,
                     "anchor_y": 0,
-                    "mapping_method": "canvas",
+                    "mapping_method": item.get(
+                        "classification_method", "canvas"
+                    ),
                     "source_png": body["png_output"],
                     "replacement_path": replacement_relative(
                         item["category"], body
@@ -831,6 +871,7 @@ def build_command(args):
         "projects_directory": "projects",
         "previews_directory": "previews",
         "replacement_directory": "replacements",
+        "previews_mode": "lazy",
         "package_layout_version": PACKAGE_LAYOUT_VERSION,
         "package_directory_template": (
             f"{PACKAGE_ROOT_NAME}/{{category}}/{{package}}"
@@ -952,7 +993,10 @@ def validate_command(args):
             int(composition["canvas"]["height"]),
         )
         expected_category = BODY_CATEGORIES.get(canvas)
-        if expected_category != composition["category"]:
+        if (
+            composition.get("presentation", "composite") != "single_texture"
+            and expected_category != composition["category"]
+        ):
             problems.append(
                 f"{prefix}: canvas {canvas} conflicts with category"
             )

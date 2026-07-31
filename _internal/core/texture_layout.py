@@ -9,6 +9,12 @@ PACKAGE_CATEGORIES = (
     "outgame_navigator",
     "ingame_navigator",
     "combat_portrait",
+    "awakening",
+    "favorite_mobile_suit",
+    "select_navigator",
+    "select_mobile_suit_thumbnail",
+    "select_mobile_suit",
+    "match_mobile_suit",
     "pending",
 )
 
@@ -25,4 +31,3 @@ def package_prefix(package, category):
     if category not in PACKAGE_CATEGORIES:
         raise ValueError(f"unknown package category: {category}")
     return f"{PACKAGE_ROOT_NAME}\\{category}\\{package}\\"
-

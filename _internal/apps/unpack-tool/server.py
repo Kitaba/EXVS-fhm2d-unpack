@@ -24,6 +24,7 @@ ACTION_LABELS = {
     "catalog": "重建纹理目录",
     "validate": "验证全部图片",
     "map": "分类并生成组合映射",
+    "reclassify": "重新分类现有图片",
     "replan": "自动重规划包目录",
     "full": "一键建立完整立绘库",
 }
@@ -131,6 +132,8 @@ class JobManager:
             ]
         if action == "map":
             return ["map", "map_validate"]
+        if action == "reclassify":
+            return ["catalog", "map", "replan", "map_validate"]
         return [action]
 
     def append(self, line, log_stream=None):
@@ -148,7 +151,7 @@ class JobManager:
     def start(self, action):
         if action not in ACTION_LABELS:
             raise ValueError("未知操作")
-        if action not in ("color", "replan") and not self.source_root.is_dir():
+        if action not in ("color", "replan", "reclassify") and not self.source_root.is_dir():
             raise FileNotFoundError(
                 f"未找到游戏资源目录：{self.source_root}"
             )
@@ -317,6 +320,7 @@ class JobManager:
         state.update(
             {
                 "app_id": "exvs_unpack_tool",
+                "ui_api_version": 2,
                 "game_root": str(self.game_root),
                 "source_root": str(self.source_root),
                 "workspace": str(self.workspace),
