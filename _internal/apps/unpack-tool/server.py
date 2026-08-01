@@ -304,16 +304,12 @@ class JobManager:
         package_count, supported, texture_count = self.inventory_counts()
         mapping_path = self.mapping_root / "mapping.json"
         group_count = 0
-        mapping_source = None
-        mapping_game_version = None
         if mapping_path.is_file():
             try:
                 mapping = json.loads(
                     mapping_path.read_text(encoding="utf-8")
                 )
                 group_count = mapping.get("group_count", 0)
-                mapping_source = mapping.get("mapping_source")
-                mapping_game_version = mapping.get("game_version")
             except (OSError, ValueError):
                 pass
         usage = shutil.disk_usage(self.workspace)
@@ -329,8 +325,6 @@ class JobManager:
                 "supported_package_count": supported,
                 "texture_count": texture_count,
                 "mapped_group_count": group_count,
-                "mapping_source": mapping_source,
-                "mapping_game_version": mapping_game_version,
                 "free_gib": round(usage.free / 1024**3, 2),
                 "log_lines": lines,
             }
