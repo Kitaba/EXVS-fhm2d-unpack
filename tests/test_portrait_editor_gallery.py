@@ -36,9 +36,13 @@ class AwakeningGalleryTests(unittest.TestCase):
         data = PortraitData.__new__(PortraitData)
         data.mapping_root = root
         data.groups = [
-            group("awakening", "0xAAAA0001", "g01_00001"),
+            group(
+                "awakening", "0xAAAA0001", "g01_00001", 1824, 1104
+            ),
             group("awakening", "0xAAAA0001", "g01_00002", 760),
-            group("awakening", "0xAAAA0001", "g01_00003", 1064, 1180),
+            group(
+                "awakening", "0xAAAA0001", "g01_00003", 1824, 1104
+            ),
             group("awakening", "0xBBBB0002", "g01_00001"),
             group("match_mobile_suit", "0xCCCC0003", "g00_00000", 840, 432),
         ]
@@ -55,10 +59,11 @@ class AwakeningGalleryTests(unittest.TestCase):
         self.assertTrue(first["collection"])
         self.assertEqual(first["package"], "0xAAAA0001")
         self.assertEqual(first["member_count"], 3)
-        self.assertEqual(len(first["members"]), 3)
         self.assertEqual(
-            first["members"][1]["canvas"], [760, 1000]
+            first["thumbnail"]["canvas"], [1824, 1104]
         )
+        self.assertEqual(first["thumbnail"]["group"], "g01_00001")
+        self.assertFalse(first["thumbnail_fallback"])
 
     def test_modified_filter_keeps_the_whole_awakening_package(self):
         modified = {
@@ -71,11 +76,17 @@ class AwakeningGalleryTests(unittest.TestCase):
         self.assertEqual(result["total"], 1)
         item = result["items"][0]
         self.assertTrue(item["modified"])
-        self.assertEqual(len(item["members"]), 3)
-        self.assertEqual(
-            [member["modified"] for member in item["members"]],
-            [False, True, False],
-        )
+        self.assertEqual(item["member_count"], 3)
+        self.assertFalse(item["thumbnail"]["modified"])
+
+    def test_package_without_fixed_portrait_uses_largest_image(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data = self.portrait_data(Path(directory))
+            result = data.list_groups("awakening", "0xBBBB", False, 1, 48)
+
+        item = result["items"][0]
+        self.assertEqual(item["thumbnail"]["canvas"], [800, 1000])
+        self.assertTrue(item["thumbnail_fallback"])
 
     def test_other_categories_remain_one_composition_per_cell(self):
         with tempfile.TemporaryDirectory() as directory:

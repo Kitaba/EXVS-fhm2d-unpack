@@ -356,11 +356,11 @@ function renderCategoryTabs() {
 
 function renderGalleryItem(item) {
   if (item.collection) {
-    const active = item.members.some(
-      (member) => member.id === state.selectedId,
-    );
+    const thumbnail = item.thumbnail;
+    const active = thumbnail.id === state.selectedId;
     return `
-      <div class="portrait-card collection-card ${active ? "active" : ""}">
+      <div class="portrait-card collection-card ${active ? "active" : ""}"
+        data-id="${escapeHtml(thumbnail.id)}" role="button" tabindex="0">
         <button
           class="package-check ${isPackageIncluded(item.package, item.modified) ? "selected" : ""}"
           type="button"
@@ -369,21 +369,12 @@ function renderGalleryItem(item) {
           title="额外纳入包 ${escapeHtml(item.package)} 到补丁构建">
           ✓
         </button>
-        <div class="collection-thumbs">
-          ${item.members.map((member, index) => `
-            <button class="collection-thumb ${member.id === state.selectedId ? "active" : ""}"
-              type="button" data-id="${escapeHtml(member.id)}"
-              title="${escapeHtml(member.group)} · ${member.canvas[0]}×${member.canvas[1]}">
-              <img src="${escapeHtml(member.preview_url)}" alt="" loading="lazy">
-              <span>${index + 1}</span>
-              ${member.modified ? '<i class="replacement-mark"></i>' : ""}
-            </button>
-          `).join("")}
-        </div>
+        <img class="portrait-thumb" src="${escapeHtml(thumbnail.preview_url)}"
+          alt="" loading="lazy">
         ${item.modified ? '<span class="card-modified">已修改</span>' : ""}
         <span class="portrait-details">
           <span class="portrait-name">${escapeHtml(item.package)}</span>
-          <span class="portrait-meta">同一文件夹 · ${item.member_count} 张觉醒图</span>
+          <span class="portrait-meta">${thumbnail.canvas[0]}×${thumbnail.canvas[1]} · 文件夹内 ${item.member_count} 张</span>
         </span>
       </div>
     `;

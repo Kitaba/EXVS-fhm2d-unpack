@@ -32,6 +32,7 @@ CATEGORY_LABELS = {
     "match_symbol": "匹配界面符号图",
 }
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
+AWAKENING_PORTRAIT_SIZE = (1824, 1104)
 
 
 class PortraitData:
@@ -242,20 +243,27 @@ class PortraitData:
         if category == "awakening":
             items = []
             for package, package_rows, keys, package_modified in page_candidates:
-                members = [
-                    self.gallery_group_payload(row, key, modified_keys)
-                    for row, key in zip(package_rows, keys)
-                ]
+                thumbnail_row = self.awakening_thumbnail_row(package_rows)
+                thumbnail_index = package_rows.index(thumbnail_row)
+                thumbnail = self.gallery_group_payload(
+                    thumbnail_row,
+                    keys[thumbnail_index],
+                    modified_keys,
+                )
                 items.append(
                     {
-                        "id": members[0]["id"],
+                        "id": thumbnail["id"],
                         "category": "awakening",
                         "category_label": CATEGORY_LABELS["awakening"],
                         "package": package,
                         "group": "",
                         "collection": True,
-                        "member_count": len(members),
-                        "members": members,
+                        "member_count": len(package_rows),
+                        "thumbnail": thumbnail,
+                        "thumbnail_fallback": (
+                            tuple(thumbnail["canvas"])
+                            != AWAKENING_PORTRAIT_SIZE
+                        ),
                         "modified": package_modified,
                     }
                 )
@@ -271,6 +279,22 @@ class PortraitData:
             "page_size": page_size,
             "pages": max(1, (total + page_size - 1) // page_size),
         }
+
+    @staticmethod
+    def awakening_thumbnail_row(rows):
+        """Choose one portrait thumbnail while retaining every mapped row."""
+        for row in rows:
+            dimensions = (
+                int(row["body_width"]),
+                int(row["body_height"]),
+            )
+            if dimensions == AWAKENING_PORTRAIT_SIZE:
+                return row
+        return max(
+            rows,
+            key=lambda row: int(row["body_width"])
+            * int(row["body_height"]),
+        )
 
     def gallery_group_payload(self, row, key, modified_keys):
         """Build one selectable composition shown in the gallery."""

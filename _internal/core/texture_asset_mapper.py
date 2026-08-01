@@ -291,7 +291,7 @@ def combat_match_family(body_image, overlay_images):
     weight = (overlay[:, :, 3] / 255.0) * stable * border
     weight_sum = float(weight.sum())
     if weight_sum < 1:
-        raise ValueError("combat overlay family has no stable border pixels")
+        return None
 
     error = fft_correlate_valid(
         np.sum(body * body, axis=2), weight
