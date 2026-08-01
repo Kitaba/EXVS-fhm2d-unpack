@@ -26,6 +26,9 @@ CATEGORY_LABELS = {
     "select_mobile_suit_thumbnail": "选机界面机体缩略图",
     "select_mobile_suit": "选机界面机体立绘",
     "match_mobile_suit": "匹配界面机体图",
+    "match_card_frame": "匹配界面边框图",
+    "match_card_background": "匹配界面卡片背景图",
+    "match_symbol": "匹配界面符号图",
 }
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 

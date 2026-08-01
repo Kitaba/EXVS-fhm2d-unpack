@@ -12,7 +12,14 @@ from texture_classification import (
 )
 
 
-def texture(group, index, width, height, storage_format="bc7"):
+def texture(
+    group,
+    index,
+    width,
+    height,
+    storage_format="bc7",
+    embedded_name="",
+):
     return {
         "group_label": group,
         "texture_index": index,
@@ -20,6 +27,7 @@ def texture(group, index, width, height, storage_format="bc7"):
         "width": width,
         "height": height,
         "storage_format": storage_format,
+        "embedded_name": embedded_name,
     }
 
 
@@ -43,19 +51,87 @@ def awakening_rows(include_all_anchors=True, third_group=False):
 
 
 class TextureClassificationTests(unittest.TestCase):
-    def test_dimension_categories(self):
-        cases = {
-            (458, 680): "favorite_mobile_suit",
-            (1020, 680): "select_navigator",
-            (1920, 1080): "select_mobile_suit",
-            (840, 432): "match_mobile_suit",
-        }
-        for dimensions, expected in cases.items():
-            with self.subTest(dimensions=dimensions):
-                rows = [texture("g00", 0, *dimensions)]
+    def test_embedded_name_categories(self):
+        cases = (
+            ((458, 680), "46XTms_card_018_001_001", "favorite_mobile_suit"),
+            ((1020, 680), "46XTvs_p_r_059_003_c04", "select_navigator"),
+            ((1920, 1080), "46XTms_ms_l_002_013_001", "select_mobile_suit"),
+            ((840, 432), "46XTms_sticker_014_021_001_T08_001", "match_mobile_suit"),
+            ((840, 432), "46XTsticker_frm_0322", "match_card_frame"),
+            ((840, 432), "46XTsticker_bg_0364", "match_card_background"),
+            ((840, 432), "46XTsticker_emb_0097", "match_symbol"),
+        )
+        for dimensions, embedded_name, expected in cases:
+            with self.subTest(embedded_name=embedded_name):
+                rows = [
+                    texture(
+                        "g00",
+                        0,
+                        *dimensions,
+                        embedded_name=embedded_name,
+                    )
+                ]
                 result = classify_package_assets("0x12345678", rows)
                 self.assertEqual(result["category"], expected)
+                self.assertEqual(result["method"], "embedded_name")
                 self.assertEqual(result["rows"], rows)
+
+    def test_dimensions_alone_do_not_claim_semantic_category(self):
+        for dimensions in ((458, 680), (1020, 680), (1920, 1080), (840, 432)):
+            with self.subTest(dimensions=dimensions):
+                rows = [
+                    texture(
+                        "g00",
+                        0,
+                        *dimensions,
+                        embedded_name="46XTimg-00000",
+                    )
+                ]
+                self.assertIsNone(
+                    classify_package_assets("0x12345678", rows)
+                )
+
+    def test_match_background_effect_sequence_is_kept_together(self):
+        rows = [
+            texture(
+                "g00",
+                0,
+                840,
+                432,
+                "rgba8",
+                "46XTimg-00000",
+            )
+        ]
+        rows.extend(
+            texture(
+                "g00",
+                index,
+                420,
+                216,
+                "rgba8",
+                f"46XTimg-{index:05d}",
+            )
+            for index in range(1, 10)
+        )
+        result = classify_package_assets("0x42C5CF02", rows)
+        self.assertEqual(result["category"], "match_card_background")
+        self.assertEqual(result["method"], "match_background_sequence")
+        self.assertEqual(result["rows"], rows)
+
+    def test_mixed_generic_package_remains_pending(self):
+        rows = [
+            texture("g00", 0, 840, 432, "rgba8", "46XTimg-00000"),
+            texture("g00", 1, 841, 432, "rgba8", "46XTimg-00001"),
+            texture("g00", 2, 960, 432, "rgba8", "46XTimg-00002"),
+        ]
+        self.assertIsNone(classify_package_assets("0x514982BD", rows))
+
+    def test_conflicting_named_categories_remain_pending(self):
+        rows = [
+            texture("g00", 0, 840, 432, "rgba8", "46XTsticker_bg_0001"),
+            texture("g00", 1, 840, 432, "rgba8", "46XTsticker_frm_0001"),
+        ]
+        self.assertIsNone(classify_package_assets("0x12345678", rows))
 
     def test_special_thumbnail_package_uses_package_id(self):
         rows = [

@@ -75,6 +75,9 @@ const roleLabels = {
   select_mobile_suit_thumbnail: "选机界面机体缩略图",
   select_mobile_suit: "选机界面机体立绘",
   match_mobile_suit: "匹配界面机体图",
+  match_card_frame: "匹配界面边框图",
+  match_card_background: "匹配界面卡片背景图",
+  match_symbol: "匹配界面符号图",
   mouth: "嘴部",
   mouth_1: "嘴部 1",
   mouth_2: "嘴部 2",
@@ -338,6 +341,9 @@ function renderCategoryTabs() {
     "select_mobile_suit_thumbnail",
     "select_mobile_suit",
     "match_mobile_suit",
+    "match_card_frame",
+    "match_card_background",
+    "match_symbol",
   ];
   els.categoryTabs.innerHTML = order.map((category) => `
     <button class="category-tab ${state.category === category ? "active" : ""}"

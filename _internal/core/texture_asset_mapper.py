@@ -85,13 +85,14 @@ def stable_catalog_signature(path):
         "package",
         "group_label",
         "embedded_index",
+        "embedded_name",
         "width",
         "height",
         "storage_format",
         "pixel_sha256",
     )
     digest = hashlib.sha256()
-    digest.update(b"EXVSIB_TEXTURE_CATALOG_SIGNATURE_V1\n")
+    digest.update(b"EXVSIB_TEXTURE_CATALOG_SIGNATURE_V2\n")
     with path.open(encoding="utf-8-sig", newline="") as stream:
         for row in csv.DictReader(stream):
             for field in fields:

@@ -34,7 +34,7 @@ class SingleTextureMappingTests(unittest.TestCase):
             Image.new("RGBA", (458, 680), (10, 20, 30, 255)).save(png)
             fields = [
                 "package", "group_label", "texture_index", "embedded_index",
-                "width", "height", "storage_format", "pixel_sha256",
+                "embedded_name", "width", "height", "storage_format", "pixel_sha256",
                 "png_output",
             ]
             row = {
@@ -42,6 +42,7 @@ class SingleTextureMappingTests(unittest.TestCase):
                 "group_label": "g00",
                 "texture_index": "0",
                 "embedded_index": "0",
+                "embedded_name": "46XTms_card_018_001_001",
                 "width": "458",
                 "height": "680",
                 "storage_format": "bc7",
