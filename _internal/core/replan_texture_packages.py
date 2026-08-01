@@ -6,6 +6,7 @@ import csv
 import json
 import shutil
 import sys
+import time
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -106,6 +107,32 @@ def rewrite_package_path(value, package, category):
     return value
 
 
+def rewrite_known_package_path(value, package_to_category):
+    """Rewrite one package path with a direct package lookup."""
+    if not value:
+        return value
+    value = str(value)
+    for separator in ("\\", "/"):
+        marker = f"{PACKAGE_ROOT_NAME}{separator}"
+        start = value.find(marker)
+        if start < 0:
+            continue
+        tail = value[start + len(marker):]
+        parts = tail.split(separator, 2)
+        if not parts:
+            continue
+        if parts[0] in PACKAGE_CATEGORIES:
+            if len(parts) < 2:
+                continue
+            package = parts[1]
+        else:
+            package = parts[0]
+        category = package_to_category.get(package)
+        if category:
+            return rewrite_package_path(value, package, category)
+    return value
+
+
 def update_csv_paths(path, package_to_category, fields):
     if not path.is_file():
         return 0
@@ -132,12 +159,12 @@ def rewrite_json_paths(value, package_to_category):
     if isinstance(value, dict):
         for key, item in list(value.items()):
             if isinstance(item, str) and key == "source_png":
-                for package, category in package_to_category.items():
-                    new = rewrite_package_path(item, package, category)
-                    if new != item:
-                        value[key] = new
-                        changed += 1
-                        break
+                new = rewrite_known_package_path(
+                    item, package_to_category
+                )
+                if new != item:
+                    value[key] = new
+                    changed += 1
             else:
                 changed += rewrite_json_paths(item, package_to_category)
     elif isinstance(value, list):
@@ -148,7 +175,16 @@ def rewrite_json_paths(value, package_to_category):
 
 def update_compositions(mapping_root, package_to_category):
     changed = 0
-    for path in (mapping_root / "projects").rglob("composition.json"):
+    projects_root = mapping_root / "projects"
+    if len(package_to_category) <= 5000:
+        paths = []
+        for package, category in package_to_category.items():
+            package_root = projects_root / category / package
+            if package_root.is_dir():
+                paths.extend(package_root.rglob("composition.json"))
+    else:
+        paths = list(projects_root.rglob("composition.json"))
+    for index, path in enumerate(paths, 1):
         data = json.loads(path.read_text(encoding="utf-8"))
         count = rewrite_json_paths(data, package_to_category)
         if count:
@@ -157,7 +193,20 @@ def update_compositions(mapping_root, package_to_category):
                 encoding="utf-8",
             )
             changed += count
+        if index % 500 == 0:
+            print(
+                f"replan_compositions={index}/{len(paths)}",
+                flush=True,
+            )
     return changed
+
+
+def timed_stage(label, function):
+    started = time.perf_counter()
+    result = function()
+    elapsed = time.perf_counter() - started
+    print(f"replan_{label}_seconds={elapsed:.2f}", flush=True)
+    return result
 
 
 def backup_manifests(all_textures, mapping_root, backup_root):
@@ -209,37 +258,85 @@ def main(argv=None):
 
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         backup_root = mapping_root / "replan-backups" / stamp
-        backup_manifests(all_textures, mapping_root, backup_root)
+        marker_path = mapping_root / "replan-in-progress.json"
+        recovering = marker_path.is_file()
+        marker_path.write_text(
+            json.dumps(
+                {
+                    "started": stamp,
+                    "packages_to_move": len(moves),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        if recovering:
+            print("replan_recovery=true", flush=True)
+        timed_stage(
+            "backup",
+            lambda: backup_manifests(
+                all_textures, mapping_root, backup_root
+            ),
+        )
         for category in PACKAGE_CATEGORIES:
             (package_root / category).mkdir(parents=True, exist_ok=True)
-        for source, category in moves:
-            target = package_root / category / source.name
-            if target.exists():
-                raise FileExistsError(f"target already exists: {target}")
-            shutil.move(str(source), str(target))
+
+        def move_packages():
+            for index, (source, category) in enumerate(moves, 1):
+                target = package_root / category / source.name
+                if target.exists():
+                    raise FileExistsError(
+                        f"target already exists: {target}"
+                    )
+                shutil.move(str(source), str(target))
+                if index % 250 == 0:
+                    print(
+                        f"replan_moves={index}/{len(moves)}",
+                        flush=True,
+                    )
+
+        timed_stage("move", move_packages)
+        rewrite_categories = (
+            package_to_category
+            if recovering
+            else {source.name: category for source, category in moves}
+        )
         manifest = [
             {"package": package, "category": category}
             for package, category in sorted(package_to_category.items())
         ]
 
-        changed = {
-            "textures_csv": update_csv_paths(
-                all_textures / "inventory" / "textures.csv",
-                package_to_category,
-                ("package_directory", "png_output"),
-            ),
-            "groups_csv": update_csv_paths(
-                mapping_root / "groups.csv",
-                package_to_category,
-                ("body_png",),
-            ),
-            "layers_csv": update_csv_paths(
-                mapping_root / "layers.csv",
-                package_to_category,
-                ("source_png",),
-            ),
-            "compositions": update_compositions(mapping_root, package_to_category),
-        }
+        def rewrite_manifests():
+            if not rewrite_categories:
+                return {
+                    "textures_csv": 0,
+                    "groups_csv": 0,
+                    "layers_csv": 0,
+                    "compositions": 0,
+                }
+            return {
+                "textures_csv": update_csv_paths(
+                    all_textures / "inventory" / "textures.csv",
+                    rewrite_categories,
+                    ("package_directory", "png_output"),
+                ),
+                "groups_csv": update_csv_paths(
+                    mapping_root / "groups.csv",
+                    rewrite_categories,
+                    ("body_png",),
+                ),
+                "layers_csv": update_csv_paths(
+                    mapping_root / "layers.csv",
+                    rewrite_categories,
+                    ("source_png",),
+                ),
+                "compositions": update_compositions(
+                    mapping_root, rewrite_categories
+                ),
+            }
+
+        changed = timed_stage("rewrite", rewrite_manifests)
         mapping_path = mapping_root / "mapping.json"
         mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
         mapping["package_layout_version"] = 1
@@ -269,6 +366,7 @@ def main(argv=None):
             ),
             encoding="utf-8",
         )
+        marker_path.unlink(missing_ok=True)
         print(
             json.dumps(
                 {

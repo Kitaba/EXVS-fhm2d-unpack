@@ -10,6 +10,8 @@ sys.path.insert(0, str(CORE_DIR))
 
 from replan_texture_packages import (
     discover_packages,
+    rewrite_json_paths,
+    rewrite_known_package_path,
     rewrite_package_path,
 )
 
@@ -65,6 +67,47 @@ class ReclassificationMoveTests(unittest.TestCase):
                 absolute, "0x12345678", "awakening"
             ).endswith(expected_tail)
         )
+
+    def test_directly_rewrites_only_known_package(self):
+        categories = {"0x12345678": "awakening"}
+        known = r"packages\pending\0x12345678\png\image.png"
+        unknown = r"packages\pending\0x87654321\png\image.png"
+
+        self.assertEqual(
+            rewrite_known_package_path(known, categories),
+            r"packages\awakening\0x12345678\png\image.png",
+        )
+        self.assertEqual(
+            rewrite_known_package_path(unknown, categories), unknown
+        )
+
+    def test_json_rewrite_uses_nested_source_paths(self):
+        data = {
+            "body": {
+                "source_png": (
+                    r"packages\pending\0x12345678\png\body.png"
+                )
+            },
+            "states": [
+                {
+                    "layers": [
+                        {
+                            "source_png": (
+                                r"packages\pending\0x12345678"
+                                r"\png\face.png"
+                            )
+                        }
+                    ]
+                }
+            ],
+        }
+
+        changed = rewrite_json_paths(
+            data, {"0x12345678": "awakening"}
+        )
+
+        self.assertEqual(changed, 2)
+        self.assertIn(r"packages\awakening", data["body"]["source_png"])
 
 
 if __name__ == "__main__":
