@@ -241,7 +241,47 @@ def export_project(input_path, output_root, texconv, force=False):
     return project, project_dir
 
 
-def load_project(project_dir):
+def prepare_project(input_path, output_root, texconv):
+    """Reuse a valid project and restore only PNG files edited last time."""
+    input_path = Path(input_path).resolve()
+    output_root = Path(output_root)
+    project_dir = output_root / input_path.stem
+    project_path = project_dir / "project.json"
+    if not project_path.is_file():
+        project, project_dir = export_project(
+            input_path, output_root, texconv, force=False
+        )
+        return project, project_dir, False
+
+    try:
+        project, source_path, textures, status_rows = project_status(project_dir)
+        if source_path.resolve() != input_path:
+            raise ValueError("cached project uses a different source file")
+        modified_indices = {
+            str(row["texture_index"])
+            for row in status_rows
+            if row["modified"]
+        }
+        if modified_indices:
+            original_dds = [
+                project_dir / row["dds_output"]
+                for row in textures
+                if row["texture_index"] in modified_indices
+            ]
+            convert_dds_to_png(
+                texconv,
+                original_dds,
+                project_dir / project["editable_png_directory"],
+            )
+        return project, project_dir, True
+    except (FileNotFoundError, ValueError, OSError, KeyError):
+        project, project_dir = export_project(
+            input_path, output_root, texconv, force=True
+        )
+        return project, project_dir, False
+
+
+def load_project(project_dir, validate_source=True):
     project_path = project_dir / "project.json"
     if not project_path.is_file():
         raise FileNotFoundError(f"missing project file: {project_path}")
@@ -253,12 +293,13 @@ def load_project(project_dir):
     source_path = Path(project["source"])
     if not source_path.is_file():
         raise FileNotFoundError(f"source fhm2d is missing: {source_path}")
-    source_hash = sha256_file(source_path)
-    if source_hash != project["source_sha256"]:
-        raise ValueError(
-            f"source fhm2d hash changed: {source_path}; expected "
-            f"{project['source_sha256']}, got {source_hash}"
-        )
+    if validate_source:
+        source_hash = sha256_file(source_path)
+        if source_hash != project["source_sha256"]:
+            raise ValueError(
+                f"source fhm2d hash changed: {source_path}; expected "
+                f"{project['source_sha256']}, got {source_hash}"
+            )
     textures = read_csv(project_dir / project["textures_manifest"])
     png_manifest = {
         row["texture_index"]: row
@@ -269,8 +310,10 @@ def load_project(project_dir):
     return project, source_path, textures, png_manifest
 
 
-def project_status(project_dir):
-    project, source_path, textures, png_manifest = load_project(project_dir)
+def project_status(project_dir, validate_source=True):
+    project, source_path, textures, png_manifest = load_project(
+        project_dir, validate_source=validate_source
+    )
     png_dir = project_dir / project["editable_png_directory"]
     rows = []
     for texture in textures:
@@ -404,8 +447,17 @@ def convert_changed_pngs(texconv, project_dir, changed_rows, dds_dir):
     return encoded
 
 
-def build_project(project_dir, output_path, texconv, force=False):
-    project, source_path, textures, status_rows = project_status(project_dir)
+def build_project(
+    project_dir,
+    output_path,
+    texconv,
+    force=False,
+    prepared_status=None,
+):
+    if prepared_status is None:
+        project, source_path, textures, status_rows = project_status(project_dir)
+    else:
+        project, source_path, textures, status_rows = prepared_status
     changed_rows = [row for row in status_rows if row["modified"]]
 
     if output_path.resolve() == source_path.resolve():

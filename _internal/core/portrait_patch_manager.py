@@ -11,8 +11,8 @@ from pathlib import Path
 
 from fhm2d_texture_workflow import (
     build_project,
-    export_project,
     find_texconv,
+    prepare_project,
     project_status,
 )
 
@@ -76,6 +76,8 @@ class PortraitPatchManager:
         )
         self.lock = threading.Lock()
         self.thread = None
+        self._running_plan_summary = None
+        self._inventory_cache = None
         self.lines = deque(maxlen=300)
         self.state = {
             "running": False,
@@ -209,6 +211,13 @@ class PortraitPatchManager:
         textures_path = self.texture_root / "inventory" / "textures.csv"
         if not packages_path.is_file() or not textures_path.is_file():
             raise FileNotFoundError("缺少纹理目录，请先运行解包工具")
+        signature = tuple(
+            (path.stat().st_mtime_ns, path.stat().st_size)
+            for path in (packages_path, textures_path)
+        )
+        cached = getattr(self, "_inventory_cache", None)
+        if cached and cached[0] == signature:
+            return cached[1], cached[2]
         packages = {
             Path(row["name"]).stem: row for row in read_csv(packages_path)
         }
@@ -220,6 +229,7 @@ class PortraitPatchManager:
                 int(row["embedded_index"]),
             )
             textures[key] = row
+        self._inventory_cache = (signature, packages, textures)
         return packages, textures
 
     def collect_plan(self):
@@ -305,7 +315,8 @@ class PortraitPatchManager:
                     f"游戏纹理包不存在：{item['source']}"
                 )
             item["replacements"].sort(key=lambda row: row["texture_id"])
-            result.append(item)
+            if item["replacements"]:
+                result.append(item)
         return result
 
     @staticmethod
@@ -432,22 +443,34 @@ class PortraitPatchManager:
     def summary(self):
         selected_packages = self._selected_packages()
         excluded_packages = self._excluded_packages()
-        try:
-            plan = self.collect_plan()
-            plan_error = None
-        except (FileNotFoundError, ValueError, OSError) as exc:
-            plan = []
-            plan_error = str(exc)
+        with self.lock:
+            state = dict(self.state)
+            lines = list(self.lines)
+            running_summary = self._running_plan_summary
+        if state["running"] and running_summary is not None:
+            plan = None
+            plan_error = running_summary["plan_error"]
+            replacement_count = running_summary["replacement_count"]
+            affected_packages = running_summary["affected_packages"]
+        else:
+            try:
+                plan = self.collect_plan()
+                plan_error = None
+            except (FileNotFoundError, ValueError, OSError) as exc:
+                plan = []
+                plan_error = str(exc)
+            replacement_count = sum(
+                len(item["replacements"]) for item in plan
+            )
+            affected_packages = [item["package"] for item in plan]
         build_path, build = self._latest_build()
         deployment_path, deployment = self._pointer_manifest(
             self.latest_deployment_path
         )
-        with self.lock:
-            state = dict(self.state)
-            lines = list(self.lines)
         current_fingerprint = self._fingerprint(plan) if plan else None
         build_current = bool(
-            build
+            not state["running"]
+            and build
             and build.get("status") == "built"
             and build.get("replacement_fingerprint")
             == current_fingerprint
@@ -467,11 +490,9 @@ class PortraitPatchManager:
             "log_lines": lines,
             "selected_packages": selected_packages,
             "excluded_packages": excluded_packages,
-            "replacement_count": sum(
-                len(item["replacements"]) for item in plan
-            ),
-            "affected_packages": [item["package"] for item in plan],
-            "affected_package_count": len(plan),
+            "replacement_count": replacement_count,
+            "affected_packages": affected_packages,
+            "affected_package_count": len(affected_packages),
             "plan_error": plan_error,
             "latest_build": (
                 {
@@ -504,7 +525,7 @@ class PortraitPatchManager:
             # A completed deployment can serve as the base for preparing the
             # next build. Deploying it still requires restoring the current
             # backup first; interrupted or failed rollbacks remain locked.
-            "can_build": bool(plan)
+            "can_build": bool(affected_packages)
             and (not active_deployment or can_build_while_deployed),
             "can_deploy": build_current and not active_deployment,
             "can_restore": active_deployment,
@@ -538,6 +559,11 @@ class PortraitPatchManager:
             if self.state["running"]:
                 raise ValueError("已有补丁任务正在运行")
             self.lines.clear()
+            self._running_plan_summary = {
+                "plan_error": readiness.get("plan_error"),
+                "replacement_count": readiness["replacement_count"],
+                "affected_packages": readiness["affected_packages"],
+            }
             self.state.update(
                 {
                     "running": True,
@@ -573,6 +599,7 @@ class PortraitPatchManager:
                     "message": "任务完成" if not error else "任务失败",
                 }
             )
+            self._running_plan_summary = None
 
     def _build(self):
         _, active = self._active_deployment()
@@ -627,12 +654,13 @@ class PortraitPatchManager:
             self.append(
                 f"[{index}/{len(plan)}] 从固定基底导出 {package}"
             )
-            _, project_dir = export_project(
+            _, project_dir, reused_project = prepare_project(
                 build_source,
                 self.projects_root,
                 self.texconv,
-                force=True,
             )
+            if reused_project:
+                self.append(f"{package}：复用现有回包工程")
             group_aliases = self._project_group_aliases(package, project_dir)
             project_rows = read_csv(project_dir / "textures.csv")
             for replacement in item["replacements"]:
@@ -658,7 +686,10 @@ class PortraitPatchManager:
                         f"回包工程缺少目标纹理：{target.name}"
                     )
                 shutil.copy2(replacement["replacement_file"], target)
-            _, _, _, status_rows = project_status(project_dir)
+            prepared_status = project_status(
+                project_dir, validate_source=False
+            )
+            _, _, _, status_rows = prepared_status
             modified = [row for row in status_rows if row["modified"]]
             expected_ids = {
                 replacement["texture_id"]
@@ -684,7 +715,11 @@ class PortraitPatchManager:
                 )
             output = output_root / f"{package}.fhm2d"
             report = build_project(
-                project_dir, output, self.texconv, force=False
+                project_dir,
+                output,
+                self.texconv,
+                force=False,
+                prepared_status=prepared_status,
             )
             normalized_pixels = sum(
                 row.get("normalized_transparent_pixels", 0)
@@ -705,7 +740,7 @@ class PortraitPatchManager:
                     ),
                     "build_source_sha256": build_source_hash,
                     "output": self.relative_to(output, self.workspace),
-                    "output_sha256": sha256_file(output),
+                    "output_sha256": report["output_sha256"],
                     "modified_texture_count": report[
                         "modified_texture_count"
                     ],
