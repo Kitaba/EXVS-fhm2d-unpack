@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import webbrowser
+from collections import Counter, defaultdict
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -164,66 +165,137 @@ class PortraitData:
             1 for _, layer in self.layer_index.values()
             if self.is_replaced(layer)
         )
+        category_counts = Counter()
+        awakening_packages = set()
+        for row in self.groups:
+            if row["category"] == "awakening":
+                awakening_packages.add(row["package"])
+            else:
+                category_counts[row["category"]] += 1
+        category_counts["awakening"] = len(awakening_packages)
+
+        modified_display_groups = {
+            (category, package)
+            if category == "awakening"
+            else (category, package, group)
+            for category, package, group in modified
+        }
         return {
             "app_id": "exvs_portrait_editor",
             "title": "EXVSIB 立绘编辑器",
             "patch_api_version": 3,
             "workspace": str(self.mapping_root.parent),
             "mapping_version": self.mapping["mapping_version"],
-            "group_count": self.mapping["group_count"],
+            "group_count": sum(category_counts.values()),
             "layer_count": self.mapping["layer_count"],
-            "category_counts": self.mapping["category_counts"],
+            "category_counts": dict(category_counts),
             "category_labels": CATEGORY_LABELS,
-            "modified_group_count": len(modified),
+            "modified_group_count": len(modified_display_groups),
             "replacement_count": replacement_count,
         }
 
     def list_groups(self, category, query, modified_only, page, page_size):
         query = query.casefold().strip()
         modified_keys = self.modified_group_keys()
-        filtered = []
-        for row in self.groups:
-            key = (row["category"], row["package"], row["group"])
-            if category and row["category"] != category:
-                continue
-            if modified_only and key not in modified_keys:
-                continue
-            haystack = f"{row['package']} {row['group']}".casefold()
-            if query and query not in haystack:
-                continue
-            preview = self.mapping_root / row["preview"]
-            preview_url = (
-                self.file_url("preview", row["preview"])
-                if preview.is_file()
-                else f"/api/group-preview?id={quote('/'.join(key))}"
-            )
-            filtered.append(
-                {
-                    "id": "/".join(key),
-                    "category": row["category"],
-                    "category_label": CATEGORY_LABELS[row["category"]],
-                    "package": row["package"],
-                    "group": row["group"],
-                    "status": row["status"],
-                    "canvas": [
-                        int(row["body_width"]),
-                        int(row["body_height"]),
-                    ],
-                    "family_count": int(row["overlay_family_count"]),
-                    "state_count": int(row["overlay_texture_count"]),
-                    "modified": key in modified_keys,
-                    "preview_url": preview_url,
-                    "notes": row["notes"],
-                }
-            )
-        total = len(filtered)
+        category_rows = [
+            row for row in self.groups
+            if not category or row["category"] == category
+        ]
+
+        if category == "awakening":
+            packages = defaultdict(list)
+            for row in category_rows:
+                packages[row["package"]].append(row)
+            candidates = []
+            for package, package_rows in packages.items():
+                haystack = " ".join(
+                    [package, *(row["group"] for row in package_rows)]
+                ).casefold()
+                if query and query not in haystack:
+                    continue
+                keys = [
+                    (row["category"], row["package"], row["group"])
+                    for row in package_rows
+                ]
+                package_modified = any(
+                    key in modified_keys for key in keys
+                )
+                if modified_only and not package_modified:
+                    continue
+                candidates.append(
+                    (package, package_rows, keys, package_modified)
+                )
+        else:
+            candidates = []
+            for row in category_rows:
+                key = (row["category"], row["package"], row["group"])
+                if modified_only and key not in modified_keys:
+                    continue
+                haystack = f"{row['package']} {row['group']}".casefold()
+                if query and query not in haystack:
+                    continue
+                candidates.append((row, key))
+
+        total = len(candidates)
         start = (page - 1) * page_size
+        page_candidates = candidates[start:start + page_size]
+        if category == "awakening":
+            items = []
+            for package, package_rows, keys, package_modified in page_candidates:
+                members = [
+                    self.gallery_group_payload(row, key, modified_keys)
+                    for row, key in zip(package_rows, keys)
+                ]
+                items.append(
+                    {
+                        "id": members[0]["id"],
+                        "category": "awakening",
+                        "category_label": CATEGORY_LABELS["awakening"],
+                        "package": package,
+                        "group": "",
+                        "collection": True,
+                        "member_count": len(members),
+                        "members": members,
+                        "modified": package_modified,
+                    }
+                )
+        else:
+            items = [
+                self.gallery_group_payload(row, key, modified_keys)
+                for row, key in page_candidates
+            ]
         return {
-            "items": filtered[start:start + page_size],
+            "items": items,
             "total": total,
             "page": page,
             "page_size": page_size,
             "pages": max(1, (total + page_size - 1) // page_size),
+        }
+
+    def gallery_group_payload(self, row, key, modified_keys):
+        """Build one selectable composition shown in the gallery."""
+        preview = self.mapping_root / row["preview"]
+        preview_url = (
+            self.file_url("preview", row["preview"])
+            if preview.is_file()
+            else f"/api/group-preview?id={quote('/'.join(key))}"
+        )
+        return {
+            "id": "/".join(key),
+            "category": row["category"],
+            "category_label": CATEGORY_LABELS[row["category"]],
+            "package": row["package"],
+            "group": row["group"],
+            "status": row["status"],
+            "canvas": [
+                int(row["body_width"]),
+                int(row["body_height"]),
+            ],
+            "family_count": int(row["overlay_family_count"]),
+            "state_count": int(row["overlay_texture_count"]),
+            "modified": key in modified_keys,
+            "preview_url": preview_url,
+            "notes": row["notes"],
         }
 
     @staticmethod

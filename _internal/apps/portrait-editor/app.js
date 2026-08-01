@@ -354,6 +354,62 @@ function renderCategoryTabs() {
   `).join("");
 }
 
+function renderGalleryItem(item) {
+  if (item.collection) {
+    const active = item.members.some(
+      (member) => member.id === state.selectedId,
+    );
+    return `
+      <div class="portrait-card collection-card ${active ? "active" : ""}">
+        <button
+          class="package-check ${isPackageIncluded(item.package, item.modified) ? "selected" : ""}"
+          type="button"
+          data-toggle-package="${escapeHtml(item.package)}"
+          data-modified="${item.modified ? "1" : "0"}"
+          title="额外纳入包 ${escapeHtml(item.package)} 到补丁构建">
+          ✓
+        </button>
+        <div class="collection-thumbs">
+          ${item.members.map((member, index) => `
+            <button class="collection-thumb ${member.id === state.selectedId ? "active" : ""}"
+              type="button" data-id="${escapeHtml(member.id)}"
+              title="${escapeHtml(member.group)} · ${member.canvas[0]}×${member.canvas[1]}">
+              <img src="${escapeHtml(member.preview_url)}" alt="" loading="lazy">
+              <span>${index + 1}</span>
+              ${member.modified ? '<i class="replacement-mark"></i>' : ""}
+            </button>
+          `).join("")}
+        </div>
+        ${item.modified ? '<span class="card-modified">已修改</span>' : ""}
+        <span class="portrait-details">
+          <span class="portrait-name">${escapeHtml(item.package)}</span>
+          <span class="portrait-meta">同一文件夹 · ${item.member_count} 张觉醒图</span>
+        </span>
+      </div>
+    `;
+  }
+  return `
+    <div class="portrait-card ${item.id === state.selectedId ? "active" : ""}"
+      data-id="${escapeHtml(item.id)}" role="button" tabindex="0">
+      <button
+        class="package-check ${isPackageIncluded(item.package, item.modified) ? "selected" : ""}"
+        type="button"
+        data-toggle-package="${escapeHtml(item.package)}"
+        data-modified="${item.modified ? "1" : "0"}"
+        title="额外纳入包 ${escapeHtml(item.package)} 到补丁构建">
+        ✓
+      </button>
+      <img class="portrait-thumb" src="${escapeHtml(item.preview_url)}"
+        alt="" loading="lazy">
+      ${item.modified ? '<span class="card-modified">已修改</span>' : ""}
+      <span class="portrait-details">
+        <span class="portrait-name">${escapeHtml(item.package)} / ${escapeHtml(item.group)}</span>
+        <span class="portrait-meta">${item.canvas[0]}×${item.canvas[1]} · ${item.state_count} 状态</span>
+      </span>
+    </div>
+  `;
+}
+
 async function loadGroups() {
   if (state.groupsAbort) state.groupsAbort.abort();
   state.groupsAbort = new AbortController();
@@ -379,26 +435,7 @@ async function loadGroups() {
         '<div class="gallery-message">没有符合条件的立绘</div>';
       return;
     }
-    els.gallery.innerHTML = data.items.map((item) => `
-      <div class="portrait-card ${item.id === state.selectedId ? "active" : ""}"
-        data-id="${escapeHtml(item.id)}" role="button" tabindex="0">
-        <button
-          class="package-check ${isPackageIncluded(item.package, item.modified) ? "selected" : ""}"
-          type="button"
-          data-toggle-package="${escapeHtml(item.package)}"
-          data-modified="${item.modified ? "1" : "0"}"
-          title="额外纳入包 ${escapeHtml(item.package)} 到补丁构建">
-          ✓
-        </button>
-        <img class="portrait-thumb" src="${escapeHtml(item.preview_url)}"
-          alt="" loading="lazy">
-        ${item.modified ? '<span class="card-modified">已修改</span>' : ""}
-        <span class="portrait-details">
-          <span class="portrait-name">${escapeHtml(item.package)} / ${escapeHtml(item.group)}</span>
-          <span class="portrait-meta">${item.canvas[0]}×${item.canvas[1]} · ${item.state_count} 状态</span>
-        </span>
-      </div>
-    `).join("");
+    els.gallery.innerHTML = data.items.map(renderGalleryItem).join("");
   } catch (error) {
     if (error.name !== "AbortError") {
       els.gallery.innerHTML =
