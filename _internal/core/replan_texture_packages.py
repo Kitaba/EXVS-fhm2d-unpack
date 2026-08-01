@@ -3,11 +3,15 @@
 
 import argparse
 import csv
+import errno
 import json
+import os
+import re
 import shutil
 import sys
 import time
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 
@@ -19,6 +23,9 @@ from texture_layout import (
 
 
 MAPPED_CATEGORIES = set(PACKAGE_CATEGORIES) - {DEFAULT_PACKAGE_CATEGORY}
+SOURCE_PNG_PATTERN = re.compile(
+    r'("source_png"\s*:\s*)("(?:\\.|[^"\\])*")'
+)
 
 
 def read_csv(path):
@@ -125,11 +132,22 @@ def rewrite_known_package_path(value, package_to_category):
             if len(parts) < 2:
                 continue
             package = parts[1]
+            remainder = parts[2] if len(parts) > 2 else ""
         else:
             package = parts[0]
+            remainder = separator.join(parts[1:])
         category = package_to_category.get(package)
         if category:
-            return rewrite_package_path(value, package, category)
+            rewritten = (
+                value[:start]
+                + marker
+                + category
+                + separator
+                + package
+            )
+            if remainder:
+                rewritten += separator + remainder
+            return rewritten
     return value
 
 
@@ -173,8 +191,28 @@ def rewrite_json_paths(value, package_to_category):
     return changed
 
 
-def update_compositions(mapping_root, package_to_category):
+def rewrite_composition_text(text, package_to_category):
+    """Rewrite only JSON source_png string values without rebuilding JSON."""
     changed = 0
+
+    def replace(match):
+        nonlocal changed
+        encoded = match.group(2)
+        source = json.loads(encoded)
+        rewritten = rewrite_known_package_path(
+            source, package_to_category
+        )
+        if rewritten == source:
+            return match.group(0)
+        changed += 1
+        return match.group(1) + json.dumps(
+            rewritten, ensure_ascii=False
+        )
+
+    return SOURCE_PNG_PATTERN.sub(replace, text), changed
+
+
+def update_compositions(mapping_root, package_to_category, workers=8):
     projects_root = mapping_root / "projects"
     if len(package_to_category) <= 5000:
         paths = []
@@ -184,21 +222,39 @@ def update_compositions(mapping_root, package_to_category):
                 paths.extend(package_root.rglob("composition.json"))
     else:
         paths = list(projects_root.rglob("composition.json"))
-    for index, path in enumerate(paths, 1):
-        data = json.loads(path.read_text(encoding="utf-8"))
-        count = rewrite_json_paths(data, package_to_category)
+
+    def update_one(path):
+        text = path.read_text(encoding="utf-8")
+        rewritten, count = rewrite_composition_text(
+            text, package_to_category
+        )
         if count:
-            path.write_text(
-                json.dumps(data, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
+            temporary = path.with_suffix(".json.replan.tmp")
+            temporary.write_text(rewritten, encoding="utf-8")
+            temporary.replace(path)
+        return count
+
+    changed = 0
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        results = executor.map(update_one, paths)
+        for index, count in enumerate(results, 1):
             changed += count
-        if index % 500 == 0:
-            print(
-                f"replan_compositions={index}/{len(paths)}",
-                flush=True,
-            )
+            if index % 500 == 0:
+                print(
+                    f"replan_compositions={index}/{len(paths)}",
+                    flush=True,
+                )
     return changed
+
+
+def move_package(source, target):
+    """Use a metadata-only rename, falling back across filesystems."""
+    try:
+        os.replace(source, target)
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+        shutil.move(str(source), str(target))
 
 
 def timed_stage(label, function):
@@ -229,11 +285,18 @@ def main(argv=None):
     parser.add_argument("--all-textures", required=True)
     parser.add_argument("--mapping", required=True, help="asset-mapping directory")
     parser.add_argument("--apply", action="store_true", help="move and rewrite files")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=8,
+        help="parallel filesystem workers (default: 8)",
+    )
     args = parser.parse_args(argv)
 
     try:
         all_textures = Path(args.all_textures).resolve()
         mapping_root = Path(args.mapping).resolve()
+        workers = max(1, min(int(args.workers), 32))
         package_root = all_textures / PACKAGE_ROOT_NAME
         categories = package_categories(mapping_root)
         package_to_category, moves = discover_packages(
@@ -283,18 +346,24 @@ def main(argv=None):
             (package_root / category).mkdir(parents=True, exist_ok=True)
 
         def move_packages():
-            for index, (source, category) in enumerate(moves, 1):
+            plan = []
+            for source, category in moves:
                 target = package_root / category / source.name
                 if target.exists():
                     raise FileExistsError(
                         f"target already exists: {target}"
                     )
-                shutil.move(str(source), str(target))
-                if index % 250 == 0:
-                    print(
-                        f"replan_moves={index}/{len(moves)}",
-                        flush=True,
-                    )
+                plan.append((source, target))
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                results = executor.map(
+                    lambda item: move_package(*item), plan
+                )
+                for index, _ in enumerate(results, 1):
+                    if index % 250 == 0:
+                        print(
+                            f"replan_moves={index}/{len(plan)}",
+                            flush=True,
+                        )
 
         timed_stage("move", move_packages)
         rewrite_categories = (
@@ -332,7 +401,9 @@ def main(argv=None):
                     ("source_png",),
                 ),
                 "compositions": update_compositions(
-                    mapping_root, rewrite_categories
+                    mapping_root,
+                    rewrite_categories,
+                    workers=workers,
                 ),
             }
 

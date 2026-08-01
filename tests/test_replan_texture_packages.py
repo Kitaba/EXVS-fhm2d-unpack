@@ -1,3 +1,4 @@
+import json
 import sys
 import tempfile
 import unittest
@@ -10,6 +11,8 @@ sys.path.insert(0, str(CORE_DIR))
 
 from replan_texture_packages import (
     discover_packages,
+    move_package,
+    rewrite_composition_text,
     rewrite_json_paths,
     rewrite_known_package_path,
     rewrite_package_path,
@@ -108,6 +111,43 @@ class ReclassificationMoveTests(unittest.TestCase):
 
         self.assertEqual(changed, 2)
         self.assertIn(r"packages\awakening", data["body"]["source_png"])
+
+    def test_stream_rewrites_only_source_png_values(self):
+        text = json.dumps(
+            {
+                "source_png": (
+                    r"packages\pending\0x12345678\png\body.png"
+                ),
+                "unrelated": (
+                    r"packages\pending\0x12345678\png\keep.png"
+                ),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+
+        rewritten, changed = rewrite_composition_text(
+            text, {"0x12345678": "awakening"}
+        )
+        data = json.loads(rewritten)
+
+        self.assertEqual(changed, 1)
+        self.assertIn("awakening", data["source_png"])
+        self.assertIn("pending", data["unrelated"])
+
+    def test_atomic_directory_move(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "pending" / "0x12345678"
+            target = root / "awakening" / "0x12345678"
+            source.mkdir(parents=True)
+            target.parent.mkdir(parents=True)
+            (source / "texture.png").write_bytes(b"png")
+
+            move_package(source, target)
+
+            self.assertFalse(source.exists())
+            self.assertEqual((target / "texture.png").read_bytes(), b"png")
 
 
 if __name__ == "__main__":
