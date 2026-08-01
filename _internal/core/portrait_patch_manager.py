@@ -17,6 +17,9 @@ from fhm2d_texture_workflow import (
 )
 
 
+SUPPORTED_DEPLOY_FORMATS = {"bc7", "rgba8"}
+
+
 def utc_now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -238,7 +241,7 @@ class PortraitPatchManager:
                 raise ValueError(
                     f"替换图没有对应纹理目录记录：{record['texture_id']}"
                 )
-            if texture.get("storage_format") != "bc7":
+            if texture.get("storage_format") not in SUPPORTED_DEPLOY_FORMATS:
                 raise ValueError(
                     f"暂不支持部署 {texture.get('storage_format')} 纹理："
                     f"{record['texture_id']}"
