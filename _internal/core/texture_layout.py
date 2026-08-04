@@ -14,6 +14,7 @@ PACKAGE_CATEGORIES = (
     "select_navigator",
     "select_mobile_suit_thumbnail",
     "select_mobile_suit",
+    "match_mobile_suit_portrait",
     "match_mobile_suit",
     "match_card_frame",
     "match_card_background",

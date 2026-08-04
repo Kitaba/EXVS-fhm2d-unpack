@@ -23,16 +23,16 @@ if not exist "%WORKSPACE%\asset-mapping\mapping.json" (
   exit /b 2
 )
 
-powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:8765/api/meta' -TimeoutSec 1; if([IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%') -and $j.patch_api_version -eq 3){ exit 0 } } catch {}; exit 1" >nul 2>nul
+powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:8765/api/meta' -TimeoutSec 1; if($j.app_id -eq 'exvs_portrait_editor' -and [IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%') -and $j.patch_api_version -eq 3 -and $j.frontend_version -eq 'open-folder-v1'){ exit 0 } } catch {}; exit 1" >nul 2>nul
 if not errorlevel 1 (
-  start "" "http://127.0.0.1:8765/"
+  start "" "http://127.0.0.1:8765/?frontend=open-folder-v1"
   exit /b 0
 )
 
 for /L %%P in (17865,1,17874) do (
-  powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:%%P/api/meta' -TimeoutSec 1; if($j.app_id -eq 'exvs_portrait_editor' -and [IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%') -and $j.patch_api_version -eq 3){ exit 0 } } catch {}; exit 1" >nul 2>nul
+  powershell -NoProfile -Command "try { $j=Invoke-RestMethod 'http://127.0.0.1:%%P/api/meta' -TimeoutSec 1; if($j.app_id -eq 'exvs_portrait_editor' -and [IO.Path]::GetFullPath($j.workspace) -eq [IO.Path]::GetFullPath('%WORKSPACE%') -and $j.patch_api_version -eq 3 -and $j.frontend_version -eq 'open-folder-v1'){ exit 0 } } catch {}; exit 1" >nul 2>nul
   if not errorlevel 1 (
-    start "" "http://127.0.0.1:%%P/"
+    start "" "http://127.0.0.1:%%P/?frontend=open-folder-v1"
     exit /b 0
   )
 )

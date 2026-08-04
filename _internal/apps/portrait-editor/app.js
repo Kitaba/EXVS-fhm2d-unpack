@@ -18,7 +18,7 @@ const state = {
 const els = {
   mappingMeta: document.querySelector("#mappingMeta"),
   replacementStatus: document.querySelector("#replacementStatus"),
-  categoryTabs: document.querySelector("#categoryTabs"),
+  categorySelect: document.querySelector("#categorySelect"),
   searchInput: document.querySelector("#searchInput"),
   modifiedOnly: document.querySelector("#modifiedOnly"),
   clearPackageSelection: document.querySelector("#clearPackageSelection"),
@@ -39,6 +39,7 @@ const els = {
   zoomIn: document.querySelector("#zoomIn"),
   fitButton: document.querySelector("#fitButton"),
   zoomLabel: document.querySelector("#zoomLabel"),
+  openFolderButton: document.querySelector("#openFolderButton"),
   downloadButton: document.querySelector("#downloadButton"),
   previewSelectPackage: document.querySelector("#previewSelectPackage"),
   modifiedBadge: document.querySelector("#modifiedBadge"),
@@ -71,10 +72,11 @@ const roleLabels = {
   body: "人物主体",
   awakening: "觉醒立绘",
   favorite_mobile_suit: "刷卡喜好机体",
-  select_navigator: "选机界面领航员",
+  select_navigator: "选机界面驾驶员",
   select_mobile_suit_thumbnail: "选机界面机体缩略图",
   select_mobile_suit: "选机界面机体立绘",
-  match_mobile_suit: "匹配界面机体图",
+  match_mobile_suit_portrait: "匹配界面机体立绘",
+  match_mobile_suit: "匹配界面机体卡绘",
   match_card_frame: "匹配界面边框图",
   match_card_background: "匹配界面卡片背景图",
   match_symbol: "匹配界面符号图",
@@ -137,7 +139,7 @@ async function loadMeta() {
   els.replacementStatus.textContent =
     `${state.meta.replacement_count} 张替换 · ` +
     `${state.meta.modified_group_count} 组已修改`;
-  renderCategoryTabs();
+  renderCategorySelect();
 }
 
 function patchSummaryText(data) {
@@ -330,7 +332,7 @@ function openPatchLog() {
   els.patchDialog.showModal();
 }
 
-function renderCategoryTabs() {
+function renderCategorySelect() {
   const order = [
     "outgame_navigator",
     "ingame_navigator",
@@ -340,17 +342,16 @@ function renderCategoryTabs() {
     "select_navigator",
     "select_mobile_suit_thumbnail",
     "select_mobile_suit",
+    "match_mobile_suit_portrait",
     "match_mobile_suit",
     "match_card_frame",
     "match_card_background",
     "match_symbol",
   ];
-  els.categoryTabs.innerHTML = order.map((category) => `
-    <button class="category-tab ${state.category === category ? "active" : ""}"
-      data-category="${category}" role="tab">
-      ${escapeHtml(state.meta.category_labels[category])}<br>
-      ${state.meta.category_counts[category] || 0}
-    </button>
+  els.categorySelect.innerHTML = order.map((category) => `
+    <option value="${category}" ${state.category === category ? "selected" : ""}>
+      ${escapeHtml(state.meta.category_labels[category])}（${state.meta.category_counts[category] || 0}）
+    </option>
   `).join("");
 }
 
@@ -451,6 +452,7 @@ async function selectComposition(identifier) {
         (baseline || family.states[0]).texture_id;
     }
     state.targetTextureId = composition.body.texture_id;
+    els.openFolderButton.disabled = false;
     state.zoom = null;
     els.selectionCategory.textContent = composition.category_label;
     els.selectionName.textContent =
@@ -728,12 +730,10 @@ els.searchInput.addEventListener("input", () => {
   }, 220);
 });
 
-els.categoryTabs.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-category]");
-  if (!button) return;
-  state.category = button.dataset.category;
+els.categorySelect.addEventListener("change", () => {
+  state.category = els.categorySelect.value;
   state.page = 1;
-  renderCategoryTabs();
+  renderCategorySelect();
   loadGroups();
 });
 
@@ -839,6 +839,20 @@ els.previewSelectPackage.addEventListener("click", () => {
   );
 });
 els.uploadButton.addEventListener("click", () => els.fileInput.click());
+els.openFolderButton.addEventListener("click", async () => {
+  if (!state.selectedId) return;
+  els.openFolderButton.disabled = true;
+  try {
+    await api(
+      `/api/open-folder?id=${encodeURIComponent(state.selectedId)}`,
+      { method: "POST" },
+    );
+  } catch (error) {
+    showToast(error.message, true);
+  } finally {
+    els.openFolderButton.disabled = !state.selectedId;
+  }
+});
 els.fileInput.addEventListener("change", () => {
   if (els.fileInput.files[0]) uploadReplacement(els.fileInput.files[0]);
 });
@@ -894,7 +908,7 @@ async function start() {
       const category = initialId.split("/")[0];
       if (state.meta.category_labels[category]) {
         state.category = category;
-        renderCategoryTabs();
+        renderCategorySelect();
         await loadGroups();
       }
       await selectComposition(initialId);

@@ -23,14 +23,17 @@ CATEGORY_LABELS = {
     "combat_portrait": "战斗人员立绘",
     "awakening": "觉醒立绘",
     "favorite_mobile_suit": "刷卡喜好机体",
-    "select_navigator": "选机界面领航员",
+    "select_navigator": "选机界面驾驶员",
     "select_mobile_suit_thumbnail": "选机界面机体缩略图",
     "select_mobile_suit": "选机界面机体立绘",
-    "match_mobile_suit": "匹配界面机体图",
+    "match_mobile_suit_portrait": "匹配界面机体立绘",
+    "match_mobile_suit": "匹配界面机体卡绘",
     "match_card_frame": "匹配界面边框图",
     "match_card_background": "匹配界面卡片背景图",
     "match_symbol": "匹配界面符号图",
 }
+
+FRONTEND_VERSION = "open-folder-v1"
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 AWAKENING_PORTRAIT_SIZE = (1824, 1104)
 
@@ -185,6 +188,7 @@ class PortraitData:
             "app_id": "exvs_portrait_editor",
             "title": "EXVSIB 立绘编辑器",
             "patch_api_version": 3,
+            "frontend_version": FRONTEND_VERSION,
             "workspace": str(self.mapping_root.parent),
             "mapping_version": self.mapping["mapping_version"],
             "group_count": sum(category_counts.values()),
@@ -364,6 +368,23 @@ class PortraitData:
             ]
             result["families"].append(family_result)
         return result
+
+    def open_composition_folder(self, identifier):
+        parts = identifier.split("/")
+        if len(parts) != 3:
+            raise KeyError(identifier)
+        key = tuple(parts)
+        if key not in self.composition_index:
+            raise KeyError(identifier)
+        category, package, _group = key
+        folder = self.safe_join(
+            self.texture_root / "packages",
+            Path(category) / package,
+        )
+        if not folder.is_dir():
+            raise FileNotFoundError(folder)
+        os.startfile(folder)
+        return {"folder": str(folder)}
 
     def resolve_file(self, kind, relative):
         roots = {
@@ -620,6 +641,24 @@ class PortraitHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/open-folder":
+            try:
+                identifier = self.single(
+                    parse_qs(parsed.query), "id"
+                )
+                return self.json_response(
+                    self.data.open_composition_folder(identifier)
+                )
+            except KeyError:
+                return self.error_response(
+                    "映射对象不存在", HTTPStatus.NOT_FOUND
+                )
+            except FileNotFoundError:
+                return self.error_response(
+                    "对应资源文件夹不存在", HTTPStatus.NOT_FOUND
+                )
+            except OSError as exc:
+                return self.error_response(exc)
         if parsed.path == "/api/patch/selection/clear":
             try:
                 return self.json_response(
@@ -791,7 +830,10 @@ def main():
             f"{args.port}..{args.port + 9}: {'; '.join(bind_errors)}"
         )
     actual_port = server.server_address[1]
-    url = f"http://{args.host}:{actual_port}"
+    url = (
+        f"http://{args.host}:{actual_port}/"
+        f"?frontend={FRONTEND_VERSION}"
+    )
     print(
         f"EXVSIB portrait editor: {url}",
         flush=True,

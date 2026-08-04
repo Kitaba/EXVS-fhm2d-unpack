@@ -91,6 +91,24 @@ class TextureClassificationTests(unittest.TestCase):
                     classify_package_assets("0x12345678", rows)
                 )
 
+    def test_match_mobile_suit_portrait_uses_960x900_canvas(self):
+        portrait = texture(
+            "g00", 0, 960, 900, "bc7", "46XTimg-00000"
+        )
+        effect = texture(
+            "g00", 1, 320, 180, "bc7", "46XTimg-00001"
+        )
+
+        result = classify_package_assets(
+            "0x12345678", [portrait, effect]
+        )
+
+        self.assertEqual(
+            result["category"], "match_mobile_suit_portrait"
+        )
+        self.assertEqual(result["method"], "canvas_dimensions")
+        self.assertEqual(result["rows"], [portrait])
+
     def test_match_background_effect_sequence_is_kept_together(self):
         rows = [
             texture(

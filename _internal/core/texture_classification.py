@@ -35,6 +35,7 @@ AWAKENING_MIN_ANCHORS = 5
 MATCH_BACKGROUND_FULL_SIZE = (840, 432)
 MATCH_BACKGROUND_FRAME_SIZE = (420, 216)
 MATCH_BACKGROUND_MIN_FRAMES = 8
+MATCH_MOBILE_SUIT_PORTRAIT_SIZE = (960, 900)
 
 
 def row_dimensions(row):
@@ -166,6 +167,16 @@ def classify_package_assets(package, rows):
         return classification_result(category, "embedded_name", selected)
     if len(named_rows) > 1:
         return None
+
+    match_portraits = facts["by_dimensions"].get(
+        MATCH_MOBILE_SUIT_PORTRAIT_SIZE, []
+    )
+    if match_portraits:
+        return classification_result(
+            "match_mobile_suit_portrait",
+            "canvas_dimensions",
+            match_portraits,
+        )
 
     if is_match_background_sequence(facts):
         return classification_result(
